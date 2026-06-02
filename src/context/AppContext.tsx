@@ -58,13 +58,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentOrderNumber, setCurrentOrderNumber] = useLocalStorage<number>('pizzeria-order-number', 1);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  // Initialize - clear session orders if no active shift
   React.useEffect(() => {
-    const hasOpenShift = cashShifts.some(s => s.status === 'open');
-    if (!hasOpenShift) {
-      setOrders([]);
-      setCurrentOrderNumber(1);
-    }
     setIsLoading(false);
   }, []);
 

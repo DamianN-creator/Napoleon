@@ -55,14 +55,13 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
         {/* Header */}
         <div className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-orange-500 to-red-600 p-2 rounded-lg">
-                <Pizza className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-white font-bold text-lg">Pizzeria</h1>
-                <p className="text-gray-400 text-xs">Sistema de Gestion</p>
-              </div>
+            <div className="flex flex-col items-center w-full">
+              <img
+                src="/logo.jpg"
+                alt="Napoleon Pizzeria"
+                className="w-full h-28 object-contain mix-blend-screen"
+              />
+              <p className="text-gray-400 text-xs mt-2">Sistema de Gestion</p>
             </div>
             <button
               onClick={() => setIsOpen(false)}

@@ -350,20 +350,20 @@ export default function WhatsAppBot() {
 
               <div className="space-y-4">
                 <div className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-4 mb-4">
-                  <h3 className="text-blue-400 font-medium mb-2">Instrucciones:</h3>
+                  <h3 className="text-blue-400 font-medium mb-2">Como configurar Twilio:</h3>
                   <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
-                    <li>Crea una cuenta en Facebook Business Manager</li>
-                    <li>Activa WhatsApp Business API</li>
-                    <li>Obten tu Phone Number ID y Access Token</li>
-                    <li>Copia la URL del webhook y configurala en Meta</li>
-                    <li>Usa el token de verificacion para validar el webhook</li>
+                    <li>Crea cuenta gratis en <strong>twilio.com</strong></li>
+                    <li>Ve a Messaging → Try it out → Send a WhatsApp message</li>
+                    <li>Une el sandbox enviando el codigo al numero de Twilio</li>
+                    <li>Copia la URL del webhook y pegala en la config del sandbox</li>
+                    <li>Ingresa tu Account SID y Auth Token desde el Dashboard</li>
                   </ol>
                 </div>
 
                 <div className="bg-gray-700 rounded-lg p-4">
                   <label className="text-gray-400 text-sm flex items-center gap-2 mb-2">
                     <ExternalLink className="w-4 h-4" />
-                    URL del Webhook (copiar en Meta)
+                    URL del Webhook (pegar en Twilio Sandbox Settings)
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -379,10 +379,11 @@ export default function WhatsAppBot() {
                       <Copy className="w-5 h-5 text-white" />
                     </button>
                   </div>
+                  <p className="text-gray-500 text-xs mt-1">En Twilio: When a message comes in → HTTP POST</p>
                 </div>
 
                 <div>
-                  <label className="text-gray-400 text-sm">Phone Number ID *</label>
+                  <label className="text-gray-400 text-sm">Account SID *</label>
                   <div className="flex items-center gap-2 mt-1">
                     <Phone className="w-5 h-5 text-gray-500" />
                     <input
@@ -390,13 +391,14 @@ export default function WhatsAppBot() {
                       value={formData.phone_number_id}
                       onChange={e => setFormData({ ...formData, phone_number_id: e.target.value })}
                       className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600"
-                      placeholder="123456789012345"
+                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                     />
                   </div>
+                  <p className="text-gray-500 text-xs mt-1">Lo encontras en tu Twilio Dashboard</p>
                 </div>
 
                 <div>
-                  <label className="text-gray-400 text-sm">Access Token *</label>
+                  <label className="text-gray-400 text-sm">Auth Token *</label>
                   <div className="flex items-center gap-2 mt-1">
                     <Key className="w-5 h-5 text-gray-500" />
                     <input
@@ -404,40 +406,25 @@ export default function WhatsAppBot() {
                       value={formData.access_token}
                       onChange={e => setFormData({ ...formData, access_token: e.target.value })}
                       className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600"
-                      placeholder="EAAxxxxxxxx"
+                      placeholder="Tu Auth Token de Twilio"
                     />
                   </div>
+                  <p className="text-gray-500 text-xs mt-1">Lo encontras en tu Twilio Dashboard (click en mostrar)</p>
                 </div>
 
                 <div>
-                  <label className="text-gray-400 text-sm">Webhook Verify Token</label>
-                  <div className="flex gap-2 mt-1">
+                  <label className="text-gray-400 text-sm">Numero de Twilio WhatsApp *</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Smartphone className="w-5 h-5 text-gray-500" />
                     <input
                       type="text"
-                      value={formData.webhook_verify_token}
-                      onChange={e => setFormData({ ...formData, webhook_verify_token: e.target.value })}
+                      value={formData.business_account_id}
+                      onChange={e => setFormData({ ...formData, business_account_id: e.target.value })}
                       className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600"
-                      placeholder="Token de verificacion"
+                      placeholder="+14155238886"
                     />
-                    <button
-                      onClick={generateVerifyToken}
-                      className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Generar
-                    </button>
                   </div>
-                </div>
-
-                <div>
-                  <label className="text-gray-400 text-sm">Business Account ID</label>
-                  <input
-                    type="text"
-                    value={formData.business_account_id}
-                    onChange={e => setFormData({ ...formData, business_account_id: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
-                    placeholder="Opcional"
-                  />
+                  <p className="text-gray-500 text-xs mt-1">Numero sandbox de Twilio (ej: +14155238886)</p>
                 </div>
 
                 <div>
@@ -478,9 +465,9 @@ export default function WhatsAppBot() {
                 </button>
                 <button
                   onClick={handleSaveConfig}
-                  disabled={saving || !formData.phone_number_id || !formData.access_token}
+                  disabled={saving || !formData.phone_number_id || !formData.access_token || !formData.business_account_id}
                   className={`flex-1 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                    formData.phone_number_id && formData.access_token && !saving
+                    formData.phone_number_id && formData.access_token && formData.business_account_id && !saving
                       ? 'bg-green-500 hover:bg-green-600 text-white'
                       : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   }`}
