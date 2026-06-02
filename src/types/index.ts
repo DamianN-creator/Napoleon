@@ -25,6 +25,7 @@ export interface Product {
   image?: string;
   available: boolean;
   isPizza: boolean;
+  recipe?: RecipeItem[];
 }
 
 export interface OrderItem {
@@ -167,6 +168,33 @@ export interface DailyReport {
   };
 }
 
+export interface RawMaterial {
+  id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  minimumStock: number;
+  createdAt: Date;
+}
+
+export interface StockMovement {
+  id: string;
+  rawMaterialId: string;
+  rawMaterialName: string;
+  type: 'ingreso' | 'consumo' | 'ajuste';
+  quantity: number;
+  notes?: string;
+  orderId?: string;
+  createdAt: Date;
+}
+
+export interface RecipeItem {
+  rawMaterialId: string;
+  rawMaterialName: string;
+  quantity: number;
+  unit: string;
+}
+
 export interface AppState {
   products: Product[];
   orders: Order[];
@@ -176,4 +204,6 @@ export interface AppState {
   cashShifts: CashShift[];
   completedOrders: CompletedOrder[];
   currentOrderNumber: number;
+  rawMaterials: RawMaterial[];
+  stockMovements: StockMovement[];
 }

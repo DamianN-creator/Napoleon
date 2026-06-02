@@ -63,7 +63,8 @@ export default function OrderEntry() {
     const searchLower = customerSearchTerm.toLowerCase();
     return customers.filter(c =>
       c.name.toLowerCase().includes(searchLower) ||
-      c.phone.includes(customerSearchTerm)
+      c.phone.includes(customerSearchTerm) ||
+      (c.address && c.address.toLowerCase().includes(searchLower))
     );
   }, [customers, customerSearchTerm]);
 
@@ -389,7 +390,7 @@ export default function OrderEntry() {
                     onFocus={handleCustomerInputFocus}
                     onKeyDown={handleCustomerKeyDown}
                     className="w-full bg-gray-700 text-white pl-10 pr-10 py-3 rounded-lg border border-gray-600 focus:border-cyan-500 focus:outline-none"
-                    placeholder="Buscar por nombre o telefono..."
+                    placeholder="Buscar por nombre, telefono o direccion..."
                   />
                   <button
                     onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
@@ -426,6 +427,12 @@ export default function OrderEntry() {
                                   <Phone className="w-3 h-3" />
                                   {customer.phone}
                                 </p>
+                                {customer.address && (
+                                  <p className="text-gray-500 text-xs flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" />
+                                    {customer.address}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">

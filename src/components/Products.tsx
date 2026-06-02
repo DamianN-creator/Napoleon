@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Product, ProductCategory } from '../types';
+import { Product, ProductCategory, RecipeItem } from '../types';
 import { categoryLabels } from '../data/initialData';
 import {
   Package,
@@ -14,10 +14,11 @@ import {
   EyeOff,
   DollarSign,
   Tag,
+  Boxes,
 } from 'lucide-react';
 
 export default function Products() {
-  const { products, addProduct, updateProduct, deleteProduct } = useApp();
+  const { products, addProduct, updateProduct, deleteProduct, rawMaterials } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -33,6 +34,11 @@ export default function Products() {
     isPizza: false,
   });
 
+  // Recipe state
+  const [recipe, setRecipe] = useState<RecipeItem[]>([]);
+  const [recipeMatId, setRecipeMatId] = useState('');
+  const [recipeQty, setRecipeQty] = useState('');
+
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -47,6 +53,21 @@ export default function Products() {
     return ['all', ...Array.from(cats)];
   }, [products]);
 
+  const addRecipeItem = () => {
+    const qty = Number(recipeQty);
+    if (!recipeMatId || !qty || qty <= 0) return;
+    const mat = rawMaterials.find(m => m.id === recipeMatId);
+    if (!mat) return;
+    if (recipe.some(r => r.rawMaterialId === recipeMatId)) return;
+    setRecipe(prev => [...prev, { rawMaterialId: mat.id, rawMaterialName: mat.name, quantity: qty, unit: mat.unit }]);
+    setRecipeMatId('');
+    setRecipeQty('');
+  };
+
+  const removeRecipeItem = (id: string) => {
+    setRecipe(prev => prev.filter(r => r.rawMaterialId !== id));
+  };
+
   const handleAddProduct = () => {
     if (!formData.name.trim() || formData.price <= 0) return;
 
@@ -58,6 +79,7 @@ export default function Products() {
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
       isPizza: formData.isPizza || formData.category === 'pizzas',
+      recipe: recipe.length > 0 ? recipe : undefined,
     };
 
     addProduct(newProduct);
@@ -76,6 +98,7 @@ export default function Products() {
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
       isPizza: formData.isPizza || formData.category === 'pizzas',
+      recipe: recipe.length > 0 ? recipe : undefined,
     };
 
     updateProduct(updatedProduct);
@@ -94,14 +117,10 @@ export default function Products() {
   };
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      price: 0,
-      category: 'pizzas',
-      ingredients: '',
-      available: true,
-      isPizza: false,
-    });
+    setFormData({ name: '', price: 0, category: 'pizzas', ingredients: '', available: true, isPizza: false });
+    setRecipe([]);
+    setRecipeMatId('');
+    setRecipeQty('');
   };
 
   const startEdit = (product: Product) => {
@@ -114,6 +133,9 @@ export default function Products() {
       available: product.available,
       isPizza: product.isPizza,
     });
+    setRecipe(product.recipe || []);
+    setRecipeMatId('');
+    setRecipeQty('');
   };
 
   const categoryStats = useMemo(() => {
@@ -233,6 +255,14 @@ export default function Products() {
                         +{product.ingredients.length - 4} mas
                       </span>
                     )}
+                  </div>
+                )}
+
+                {/* Recipe badge */}
+                {product.recipe && product.recipe.length > 0 && (
+                  <div className="mt-2 flex items-center gap-1 text-purple-400 text-xs">
+                    <Boxes className="w-3 h-3" />
+                    <span>{product.recipe.length} insumo{product.recipe.length > 1 ? 's' : ''} en receta</span>
                   </div>
                 )}
 
@@ -376,6 +406,64 @@ export default function Products() {
                   <span className="text-white">Es Pizza (permite mitad y mitad)</span>
                 </label>
               </div>
+
+              {/* Recipe */}
+              {rawMaterials.length > 0 && (
+                <div className="border-t border-gray-700 pt-4">
+                  <label className="text-gray-400 text-sm flex items-center gap-1 mb-3">
+                    <Boxes className="w-4 h-4" />
+                    Receta — materias primas por unidad vendida
+                  </label>
+
+                  {recipe.length > 0 && (
+                    <div className="space-y-1 mb-3">
+                      {recipe.map(r => (
+                        <div key={r.rawMaterialId} className="flex items-center justify-between bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
+                          <span className="text-white">{r.rawMaterialName}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-teal-400 font-medium">{r.quantity} {r.unit}</span>
+                            <button onClick={() => removeRecipeItem(r.rawMaterialId)} className="text-gray-500 hover:text-red-400">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <select
+                      value={recipeMatId}
+                      onChange={e => setRecipeMatId(e.target.value)}
+                      className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none text-sm"
+                    >
+                      <option value="">Seleccionar insumo...</option>
+                      {rawMaterials
+                        .filter(m => !recipe.some(r => r.rawMaterialId === m.id))
+                        .map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                        ))
+                      }
+                    </select>
+                    <input
+                      type="number"
+                      value={recipeQty}
+                      onChange={e => setRecipeQty(e.target.value)}
+                      className="w-24 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none text-sm text-center"
+                      placeholder="Cant."
+                      min="0"
+                      step="0.01"
+                    />
+                    <button
+                      onClick={addRecipeItem}
+                      disabled={!recipeMatId || !recipeQty || Number(recipeQty) <= 0}
+                      className="bg-teal-500 hover:bg-teal-600 disabled:bg-gray-600 disabled:text-gray-400 text-white px-3 py-2 rounded-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 mt-6">

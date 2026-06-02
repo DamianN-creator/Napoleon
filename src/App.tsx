@@ -12,6 +12,7 @@ import SalesHistory from './components/SalesHistory';
 import ProductsRanking from './components/ProductsRanking';
 import Cadetes from './components/Cadetes';
 import WhatsAppBot from './components/WhatsAppBot';
+import Stock from './components/Stock';
 import { Menu, DollarSign, Lock, Clock } from 'lucide-react';
 
 function AppContent() {
@@ -159,6 +160,8 @@ function AppContent() {
         return <Customers />;
       case 'products':
         return <Products />;
+      case 'stock':
+        return <Stock />;
       case 'whatsapp':
         return <WhatsAppBot />;
       case 'history':
