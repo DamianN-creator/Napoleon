@@ -13,6 +13,7 @@ import {
   X,
   Bot,
   Boxes,
+  Settings,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
     { id: 'whatsapp', label: 'WhatsApp Bot', icon: Bot },
     { id: 'history', label: 'Historial de Ventas', icon: History },
     { id: 'ranking', label: 'Ranking Productos', icon: BarChart3 },
+    { id: 'settings', label: 'Configuración', icon: Settings },
   ];
 
   return (

@@ -13,6 +13,7 @@ import ProductsRanking from './components/ProductsRanking';
 import Cadetes from './components/Cadetes';
 import WhatsAppBot from './components/WhatsAppBot';
 import Stock from './components/Stock';
+import Settings from './components/Settings';
 import { Menu, DollarSign, Lock, Clock } from 'lucide-react';
 
 function AppContent() {
@@ -170,6 +171,8 @@ function AppContent() {
         return <ProductsRanking />;
       case 'cash':
         return <CashClosing />;
+      case 'settings':
+        return <Settings />;
       default:
         return <Dashboard />;
     }
