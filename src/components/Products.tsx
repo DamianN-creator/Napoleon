@@ -13,12 +13,12 @@ import {
   Eye,
   EyeOff,
   DollarSign,
-  Tag,
   Boxes,
+  FlaskConical,
 } from 'lucide-react';
 
 export default function Products() {
-  const { products, addProduct, updateProduct, deleteProduct, rawMaterials } = useApp();
+  const { products, addProduct, updateProduct, deleteProduct, rawMaterials, subProducts } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -28,6 +28,7 @@ export default function Products() {
   const [formData, setFormData] = useState({
     name: '',
     price: 0,
+    halfPrice: '' as number | '',
     category: 'pizzas' as ProductCategory,
     ingredients: '',
     available: true,
@@ -36,6 +37,8 @@ export default function Products() {
 
   // Recipe state
   const [recipe, setRecipe] = useState<RecipeItem[]>([]);
+  // 'rawMaterial' | 'subProduct'
+  const [recipeItemType, setRecipeItemType] = useState<'rawMaterial' | 'subProduct'>('rawMaterial');
   const [recipeMatId, setRecipeMatId] = useState('');
   const [recipeQty, setRecipeQty] = useState('');
 
@@ -56,16 +59,24 @@ export default function Products() {
   const addRecipeItem = () => {
     const qty = Number(recipeQty);
     if (!recipeMatId || !qty || qty <= 0) return;
-    const mat = rawMaterials.find(m => m.id === recipeMatId);
-    if (!mat) return;
-    if (recipe.some(r => r.rawMaterialId === recipeMatId)) return;
-    setRecipe(prev => [...prev, { rawMaterialId: mat.id, rawMaterialName: mat.name, quantity: qty, unit: mat.unit }]);
+
+    if (recipeItemType === 'rawMaterial') {
+      const mat = rawMaterials.find(m => m.id === recipeMatId);
+      if (!mat || recipe.some(r => r.rawMaterialId === recipeMatId)) return;
+      setRecipe(prev => [...prev, { rawMaterialId: mat.id, rawMaterialName: mat.name, quantity: qty, unit: mat.unit }]);
+    } else {
+      const sp = subProducts.find(s => s.id === recipeMatId);
+      if (!sp || recipe.some(r => r.subProductId === recipeMatId)) return;
+      setRecipe(prev => [...prev, { subProductId: sp.id, subProductName: sp.name, quantity: qty, unit: sp.unit }]);
+    }
     setRecipeMatId('');
     setRecipeQty('');
   };
 
-  const removeRecipeItem = (id: string) => {
-    setRecipe(prev => prev.filter(r => r.rawMaterialId !== id));
+  const removeRecipeItem = (item: RecipeItem) => {
+    setRecipe(prev => prev.filter(r =>
+      item.rawMaterialId ? r.rawMaterialId !== item.rawMaterialId : r.subProductId !== item.subProductId
+    ));
   };
 
   const handleAddProduct = () => {
@@ -75,6 +86,7 @@ export default function Products() {
       id: `product-${Date.now()}`,
       name: formData.name,
       price: formData.price,
+      halfPrice: formData.halfPrice !== '' ? Number(formData.halfPrice) : undefined,
       category: formData.category,
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
@@ -94,6 +106,7 @@ export default function Products() {
       ...editingProduct,
       name: formData.name,
       price: formData.price,
+      halfPrice: formData.halfPrice !== '' ? Number(formData.halfPrice) : undefined,
       category: formData.category,
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
@@ -117,8 +130,9 @@ export default function Products() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', price: 0, category: 'pizzas', ingredients: '', available: true, isPizza: false });
+    setFormData({ name: '', price: 0, halfPrice: '', category: 'pizzas', ingredients: '', available: true, isPizza: false });
     setRecipe([]);
+    setRecipeItemType('rawMaterial');
     setRecipeMatId('');
     setRecipeQty('');
   };
@@ -128,6 +142,7 @@ export default function Products() {
     setFormData({
       name: product.name,
       price: product.price,
+      halfPrice: product.halfPrice ?? '',
       category: product.category,
       ingredients: product.ingredients.join(', '),
       available: product.available,
@@ -260,9 +275,19 @@ export default function Products() {
 
                 {/* Recipe badge */}
                 {product.recipe && product.recipe.length > 0 && (
-                  <div className="mt-2 flex items-center gap-1 text-purple-400 text-xs">
-                    <Boxes className="w-3 h-3" />
-                    <span>{product.recipe.length} insumo{product.recipe.length > 1 ? 's' : ''} en receta</span>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {product.recipe.filter(r => r.rawMaterialId).length > 0 && (
+                      <span className="flex items-center gap-1 text-teal-400 text-xs">
+                        <Boxes className="w-3 h-3" />
+                        {product.recipe.filter(r => r.rawMaterialId).length} insumo{product.recipe.filter(r => r.rawMaterialId).length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {product.recipe.filter(r => r.subProductId).length > 0 && (
+                      <span className="flex items-center gap-1 text-indigo-400 text-xs">
+                        <FlaskConical className="w-3 h-3" />
+                        {product.recipe.filter(r => r.subProductId).length} subproducto{product.recipe.filter(r => r.subProductId).length > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -342,18 +367,34 @@ export default function Products() {
                 />
               </div>
 
-              <div>
-                <label className="text-gray-400 text-sm">Precio *</label>
-                <div className="relative mt-1">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                  <input
-                    type="number"
-                    value={formData.price}
-                    onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
-                    className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none"
-                    placeholder="0"
-                    min="0"
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-400 text-sm">Precio entero *</label>
+                  <div className="relative mt-1">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <input
+                      type="number"
+                      value={formData.price}
+                      onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
+                      className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none"
+                      placeholder="0"
+                      min="0"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm">Precio medio <span className="text-gray-600">(opcional)</span></label>
+                  <div className="relative mt-1">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <input
+                      type="number"
+                      value={formData.halfPrice}
+                      onChange={e => setFormData({ ...formData, halfPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                      className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none"
+                      placeholder="—"
+                      min="0"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -408,21 +449,29 @@ export default function Products() {
               </div>
 
               {/* Recipe */}
-              {rawMaterials.length > 0 && (
+              {(rawMaterials.length > 0 || subProducts.length > 0) && (
                 <div className="border-t border-gray-700 pt-4">
                   <label className="text-gray-400 text-sm flex items-center gap-1 mb-3">
                     <Boxes className="w-4 h-4" />
-                    Receta — materias primas por unidad vendida
+                    Receta por unidad vendida
                   </label>
 
                   {recipe.length > 0 && (
                     <div className="space-y-1 mb-3">
-                      {recipe.map(r => (
-                        <div key={r.rawMaterialId} className="flex items-center justify-between bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
-                          <span className="text-white">{r.rawMaterialName}</span>
+                      {recipe.map((r, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            {r.subProductId
+                              ? <FlaskConical className="w-3.5 h-3.5 text-indigo-400" />
+                              : <Boxes className="w-3.5 h-3.5 text-teal-400" />
+                            }
+                            <span className="text-white">{r.rawMaterialName || r.subProductName}</span>
+                          </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-teal-400 font-medium">{r.quantity} {r.unit}</span>
-                            <button onClick={() => removeRecipeItem(r.rawMaterialId)} className="text-gray-500 hover:text-red-400">
+                            <span className={`font-medium ${r.subProductId ? 'text-indigo-400' : 'text-teal-400'}`}>
+                              {r.quantity} {r.unit}
+                            </span>
+                            <button onClick={() => removeRecipeItem(r)} className="text-gray-500 hover:text-red-400">
                               <X className="w-4 h-4" />
                             </button>
                           </div>
@@ -431,19 +480,49 @@ export default function Products() {
                     </div>
                   )}
 
+                  {/* Toggle insumo / subproducto */}
+                  <div className="flex gap-1 bg-gray-700/50 p-1 rounded-lg mb-2 w-fit">
+                    <button
+                      onClick={() => { setRecipeItemType('rawMaterial'); setRecipeMatId(''); }}
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                        recipeItemType === 'rawMaterial' ? 'bg-teal-500 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Boxes className="w-3 h-3" /> Insumo
+                    </button>
+                    {subProducts.length > 0 && (
+                      <button
+                        onClick={() => { setRecipeItemType('subProduct'); setRecipeMatId(''); }}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                          recipeItemType === 'subProduct' ? 'bg-indigo-500 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <FlaskConical className="w-3 h-3" /> Subproducto
+                      </button>
+                    )}
+                  </div>
+
                   <div className="flex gap-2">
                     <select
                       value={recipeMatId}
                       onChange={e => setRecipeMatId(e.target.value)}
                       className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none text-sm"
                     >
-                      <option value="">Seleccionar insumo...</option>
-                      {rawMaterials
-                        .filter(m => !recipe.some(r => r.rawMaterialId === m.id))
-                        .map(m => (
-                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
-                        ))
-                      }
+                      {recipeItemType === 'rawMaterial' ? (
+                        <>
+                          <option value="">Seleccionar insumo...</option>
+                          {rawMaterials
+                            .filter(m => !recipe.some(r => r.rawMaterialId === m.id))
+                            .map(m => <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>)}
+                        </>
+                      ) : (
+                        <>
+                          <option value="">Seleccionar subproducto...</option>
+                          {subProducts
+                            .filter(s => !recipe.some(r => r.subProductId === s.id))
+                            .map(s => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
+                        </>
+                      )}
                     </select>
                     <input
                       type="number"

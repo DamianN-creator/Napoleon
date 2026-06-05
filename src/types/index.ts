@@ -20,6 +20,7 @@ export interface Product {
   id: string;
   name: string;
   price: number;
+  halfPrice?: number;
   category: ProductCategory;
   ingredients: string[];
   image?: string;
@@ -189,10 +190,20 @@ export interface StockMovement {
 }
 
 export interface RecipeItem {
-  rawMaterialId: string;
-  rawMaterialName: string;
+  rawMaterialId?: string;
+  rawMaterialName?: string;
+  subProductId?: string;
+  subProductName?: string;
   quantity: number;
   unit: string;
+}
+
+export interface SubProduct {
+  id: string;
+  name: string;
+  unit: string;
+  recipe: RecipeItem[];
+  createdAt: Date;
 }
 
 export interface AppState {
@@ -206,4 +217,5 @@ export interface AppState {
   currentOrderNumber: number;
   rawMaterials: RawMaterial[];
   stockMovements: StockMovement[];
+  subProducts: SubProduct[];
 }

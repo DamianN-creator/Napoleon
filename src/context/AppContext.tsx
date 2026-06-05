@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, CompletedOrder, AppState, RawMaterial, StockMovement } from '../types';
+import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, CompletedOrder, AppState, RawMaterial, StockMovement, SubProduct } from '../types';
 import { initialProducts } from '../data/initialData';
 
 interface AppContextType extends AppState {
@@ -15,6 +15,11 @@ interface AppContextType extends AppState {
   deleteRawMaterial: (id: string) => void;
   addStockIngreso: (rawMaterialId: string, quantity: number, notes?: string) => void;
   adjustStock: (rawMaterialId: string, newQuantity: number, notes?: string) => void;
+
+  // SubProducts
+  addSubProduct: (sp: SubProduct) => void;
+  updateSubProduct: (sp: SubProduct) => void;
+  deleteSubProduct: (id: string) => void;
 
   // Orders
   addOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => Order;
@@ -65,6 +70,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentOrderNumber, setCurrentOrderNumber] = useLocalStorage<number>('pizzeria-order-number', 1);
   const [rawMaterials, setRawMaterials] = useLocalStorage<RawMaterial[]>('pizzeria-raw-materials', []);
   const [stockMovements, setStockMovements] = useLocalStorage<StockMovement[]>('pizzeria-stock-movements', []);
+  const [subProducts, setSubProducts] = useLocalStorage<SubProduct[]>('pizzeria-sub-products', []);
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -208,6 +214,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [rawMaterials, setRawMaterials, setStockMovements]);
 
+  // SubProducts
+  const addSubProduct = useCallback((sp: SubProduct) => {
+    setSubProducts(prev => [...prev, sp]);
+  }, [setSubProducts]);
+
+  const updateSubProduct = useCallback((sp: SubProduct) => {
+    setSubProducts(prev => prev.map(s => s.id === sp.id ? sp : s));
+  }, [setSubProducts]);
+
+  const deleteSubProduct = useCallback((id: string) => {
+    setSubProducts(prev => prev.filter(s => s.id !== id));
+  }, [setSubProducts]);
+
   // Send order: assign cadete and set status to enviado
   const sendOrder = useCallback((orderId: string, cadeteId: string) => {
     const cadete = cadetes.find(c => c.id === cadeteId);
@@ -247,14 +266,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return c;
     }));
 
-    // Deduct stock based on product recipes
+    // Deduct stock based on product recipes (expanding subproduct recipes)
     const deductions: Record<string, number> = {};
     order.items.forEach(item => {
       const product = products.find(p => p.id === item.productId);
       if (product?.recipe) {
         product.recipe.forEach(recipeItem => {
-          deductions[recipeItem.rawMaterialId] =
-            (deductions[recipeItem.rawMaterialId] || 0) + recipeItem.quantity * item.quantity;
+          if (recipeItem.rawMaterialId) {
+            deductions[recipeItem.rawMaterialId] =
+              (deductions[recipeItem.rawMaterialId] || 0) + recipeItem.quantity * item.quantity;
+          } else if (recipeItem.subProductId) {
+            const sp = subProducts.find(s => s.id === recipeItem.subProductId);
+            sp?.recipe.forEach(spItem => {
+              if (spItem.rawMaterialId) {
+                deductions[spItem.rawMaterialId] =
+                  (deductions[spItem.rawMaterialId] || 0) + spItem.quantity * recipeItem.quantity * item.quantity;
+              }
+            });
+          }
         });
       }
     });
@@ -286,7 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (customer) {
       updateCustomerStats(customer.id, order.total, order.id);
     }
-  }, [orders, customers, products, rawMaterials, setOrders, setCadetes, setRawMaterials, setStockMovements, updateCustomerStats]);
+  }, [orders, customers, products, rawMaterials, subProducts, setOrders, setCadetes, setRawMaterials, setStockMovements, updateCustomerStats]);
 
   // Cadetes
   const addCadete = useCallback((cadete: Cadete) => {
@@ -545,6 +574,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentOrderNumber,
     rawMaterials,
     stockMovements,
+    subProducts,
     isLoading,
     addProduct,
     updateProduct,
@@ -577,6 +607,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteRawMaterial,
     addStockIngreso,
     adjustStock,
+    addSubProduct,
+    updateSubProduct,
+    deleteSubProduct,
   }), [
     products,
     orders,
@@ -588,6 +621,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentOrderNumber,
     rawMaterials,
     stockMovements,
+    subProducts,
     isLoading,
     addProduct,
     updateProduct,
@@ -620,6 +654,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteRawMaterial,
     addStockIngreso,
     adjustStock,
+    addSubProduct,
+    updateSubProduct,
+    deleteSubProduct,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

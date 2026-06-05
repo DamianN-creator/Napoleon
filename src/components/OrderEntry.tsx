@@ -50,6 +50,11 @@ export default function OrderEntry() {
   const [showCashModal, setShowCashModal] = useState(false);
   const [cashInput, setCashInput] = useState<string>('');
 
+  // Portion modal (whole vs half)
+  const [showPortionModal, setShowPortionModal] = useState(false);
+  const [portionProduct, setPortionProduct] = useState<Product | null>(null);
+  const [portionHalfPrice, setPortionHalfPrice] = useState<string>('');
+
   // Customer selector
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -166,13 +171,14 @@ export default function OrderEntry() {
 
   // Add product to order
   const addProductToOrder = (product: Product) => {
-    if (product.isPizza) {
-      // For pizzas, show options
-      setShowHalfHalfModal(true);
-      return;
-    }
+    setPortionProduct(product);
+    const defaultHalf = product.halfPrice !== undefined ? product.halfPrice : Math.round(product.price / 2);
+    setPortionHalfPrice(String(defaultHalf));
+    setShowPortionModal(true);
+  };
 
-    const existingItem = items.find(i => i.productId === product.id && !i.isHalfHalf);
+  const addWholeProduct = (product: Product) => {
+    const existingItem = items.find(i => i.productId === product.id && !i.isHalfHalf && !i.productName.startsWith('½'));
     if (existingItem) {
       setItems(items.map(i =>
         i.id === existingItem.id
@@ -180,16 +186,30 @@ export default function OrderEntry() {
           : i
       ));
     } else {
-      const newItem: OrderItem = {
+      setItems([...items, {
         id: `item-${Date.now()}`,
         productId: product.id,
         productName: product.name,
         quantity: 1,
         unitPrice: product.price,
         subtotal: product.price,
-      };
-      setItems([...items, newItem]);
+      }]);
     }
+    setShowPortionModal(false);
+    setPortionProduct(null);
+  };
+
+  const addHalfProduct = (product: Product, halfPrice: number) => {
+    setItems([...items, {
+      id: `item-${Date.now()}`,
+      productId: product.id,
+      productName: `½ ${product.name}`,
+      quantity: 1,
+      unitPrice: halfPrice,
+      subtotal: halfPrice,
+    }]);
+    setShowPortionModal(false);
+    setPortionProduct(null);
   };
 
   const addWholePizza = (product: Product) => {
@@ -731,6 +751,79 @@ export default function OrderEntry() {
           </div>
         </div>
       </div>
+
+      {/* Portion Modal (whole vs half) */}
+      {showPortionModal && portionProduct && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-sm w-full">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-semibold text-white">{portionProduct.name}</h3>
+              <button
+                onClick={() => { setShowPortionModal(false); setPortionProduct(null); }}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className={`grid gap-3 ${portionProduct.isPizza ? 'grid-cols-3' : 'grid-cols-2'}`}>
+              {/* Entero */}
+              <button
+                onClick={() => addWholeProduct(portionProduct)}
+                className="flex flex-col items-center gap-2 p-4 bg-gray-700 hover:bg-cyan-500/20 border border-gray-600 hover:border-cyan-500 rounded-xl transition-colors"
+              >
+                <span className="text-white font-semibold text-sm">Entero</span>
+                <span className="text-cyan-400 font-bold text-lg">${portionProduct.price.toLocaleString()}</span>
+              </button>
+
+              {/* Medio */}
+              <div className="flex flex-col items-center gap-2 p-3 bg-gray-700 border border-gray-600 rounded-xl">
+                <span className="text-white font-semibold text-sm">½ Medio</span>
+                <div className="relative w-full">
+                  <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input
+                    type="number"
+                    value={portionHalfPrice}
+                    onChange={e => setPortionHalfPrice(e.target.value)}
+                    className="w-full bg-gray-600 text-white text-center pl-5 pr-1 py-1.5 rounded-lg border border-gray-500 focus:border-cyan-500 focus:outline-none font-bold text-base"
+                    min="0"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    const hp = Number(portionHalfPrice);
+                    if (hp > 0) addHalfProduct(portionProduct, hp);
+                  }}
+                  disabled={!portionHalfPrice || Number(portionHalfPrice) <= 0}
+                  className={`w-full py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    portionHalfPrice && Number(portionHalfPrice) > 0
+                      ? 'bg-cyan-500 hover:bg-cyan-600 text-white'
+                      : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  Agregar
+                </button>
+              </div>
+
+              {/* Mitad y Mitad — solo para pizzas */}
+              {portionProduct.isPizza && (
+                <button
+                  onClick={() => {
+                    setShowPortionModal(false);
+                    setPortionProduct(null);
+                    setHalfHalfSelection({ first: null, second: null });
+                    setShowHalfHalfModal(true);
+                  }}
+                  className="flex flex-col items-center justify-center gap-2 p-4 bg-gray-700 hover:bg-orange-500/20 border border-gray-600 hover:border-orange-500 rounded-xl transition-colors"
+                >
+                  <span className="text-white font-semibold text-sm text-center leading-tight">Mitad<br/>y Mitad</span>
+                  <span className="text-orange-400 text-xs text-center">2 gustos</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Half & Half Modal */}
       {showHalfHalfModal && (

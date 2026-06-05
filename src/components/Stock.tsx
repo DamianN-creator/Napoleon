@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { RawMaterial } from '../types';
+import { RawMaterial, SubProduct, RecipeItem } from '../types';
 import {
   Package,
   Plus,
@@ -15,17 +15,19 @@ import {
   History,
   Boxes,
   SlidersHorizontal,
+  FlaskConical,
 } from 'lucide-react';
 
-type Tab = 'inventario' | 'ingresar' | 'historial';
+type Tab = 'inventario' | 'subproductos' | 'ingresar' | 'historial';
 
-const UNITS = ['kg', 'g', 'lt', 'ml', 'u', 'docena', 'paquete', 'bolsa', 'caja'];
+const UNITS = ['kg', 'g', 'lt', 'ml', 'u', 'docena', 'paquete', 'bolsa', 'caja', 'porcion'];
 
 export default function Stock() {
   const {
     rawMaterials, stockMovements,
     addRawMaterial, updateRawMaterial, deleteRawMaterial,
     addStockIngreso, adjustStock,
+    subProducts, addSubProduct, updateSubProduct, deleteSubProduct,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<Tab>('inventario');
@@ -45,6 +47,14 @@ export default function Stock() {
   const [adjustingMaterial, setAdjustingMaterial] = useState<RawMaterial | null>(null);
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustNotes, setAdjustNotes] = useState('');
+
+  // SubProduct form
+  const [showSpModal, setShowSpModal] = useState(false);
+  const [editingSp, setEditingSp] = useState<SubProduct | null>(null);
+  const [spForm, setSpForm] = useState({ name: '', unit: 'u' });
+  const [spRecipe, setSpRecipe] = useState<RecipeItem[]>([]);
+  const [spMatId, setSpMatId] = useState('');
+  const [spQty, setSpQty] = useState('');
 
   const lowStockMaterials = useMemo(
     () => rawMaterials.filter(m => m.currentStock <= m.minimumStock),
@@ -118,6 +128,55 @@ export default function Stock() {
     setAdjustNotes('');
   };
 
+  // SubProduct helpers
+  const openAddSp = () => {
+    setEditingSp(null);
+    setSpForm({ name: '', unit: 'u' });
+    setSpRecipe([]);
+    setSpMatId('');
+    setSpQty('');
+    setShowSpModal(true);
+  };
+
+  const openEditSp = (sp: SubProduct) => {
+    setEditingSp(sp);
+    setSpForm({ name: sp.name, unit: sp.unit });
+    setSpRecipe(sp.recipe);
+    setSpMatId('');
+    setSpQty('');
+    setShowSpModal(true);
+  };
+
+  const addSpRecipeItem = () => {
+    const qty = Number(spQty);
+    if (!spMatId || !qty || qty <= 0) return;
+    const mat = rawMaterials.find(m => m.id === spMatId);
+    if (!mat || spRecipe.some(r => r.rawMaterialId === spMatId)) return;
+    setSpRecipe(prev => [...prev, { rawMaterialId: mat.id, rawMaterialName: mat.name, quantity: qty, unit: mat.unit }]);
+    setSpMatId('');
+    setSpQty('');
+  };
+
+  const removeSpRecipeItem = (id: string) => {
+    setSpRecipe(prev => prev.filter(r => r.rawMaterialId !== id));
+  };
+
+  const handleSaveSp = () => {
+    if (!spForm.name.trim()) return;
+    if (editingSp) {
+      updateSubProduct({ ...editingSp, name: spForm.name.trim(), unit: spForm.unit, recipe: spRecipe });
+    } else {
+      addSubProduct({
+        id: `sp-${Date.now()}`,
+        name: spForm.name.trim(),
+        unit: spForm.unit,
+        recipe: spRecipe,
+        createdAt: new Date(),
+      });
+    }
+    setShowSpModal(false);
+  };
+
   const formatDate = (d: Date | string) =>
     new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -134,16 +193,29 @@ export default function Stock() {
             <Boxes className="w-8 h-8 text-purple-400" />
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-white">Stock</h1>
-              <p className="text-gray-400 text-sm">{rawMaterials.length} materias primas</p>
+              <p className="text-gray-400 text-sm">
+                {rawMaterials.length} insumos · {subProducts.length} subproductos
+              </p>
             </div>
           </div>
-          <button
-            onClick={openAddModal}
-            className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Nueva Materia Prima
-          </button>
+          {activeTab === 'inventario' && (
+            <button
+              onClick={openAddModal}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Nuevo Insumo
+            </button>
+          )}
+          {activeTab === 'subproductos' && (
+            <button
+              onClick={openAddSp}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Nuevo Subproducto
+            </button>
+          )}
         </div>
 
         {/* Low stock alert */}
@@ -160,10 +232,11 @@ export default function Stock() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-800 p-1 rounded-xl mb-6 w-fit">
+        <div className="flex gap-1 bg-gray-800 p-1 rounded-xl mb-6 w-fit flex-wrap">
           {([
-            { id: 'inventario', label: 'Inventario', icon: Boxes },
-            { id: 'ingresar', label: 'Ingresar Mercaderia', icon: ArrowUpCircle },
+            { id: 'inventario', label: 'Insumos', icon: Boxes },
+            { id: 'subproductos', label: 'Subproductos', icon: FlaskConical },
+            { id: 'ingresar', label: 'Ingresar', icon: ArrowUpCircle },
             { id: 'historial', label: 'Historial', icon: History },
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
@@ -185,7 +258,7 @@ export default function Stock() {
             {rawMaterials.length === 0 ? (
               <div className="bg-gray-800 rounded-xl border border-gray-700 p-12 text-center">
                 <Boxes className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400 text-lg font-medium">No hay materias primas cargadas</p>
+                <p className="text-gray-400 text-lg font-medium">No hay insumos cargados</p>
                 <p className="text-gray-500 text-sm mt-1">Agregá insumos para comenzar a controlar el stock</p>
                 <button
                   onClick={openAddModal}
@@ -267,6 +340,76 @@ export default function Stock() {
           </>
         )}
 
+        {/* ── SUBPRODUCTOS ── */}
+        {activeTab === 'subproductos' && (
+          <>
+            <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 mb-5 flex items-start gap-3">
+              <FlaskConical className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <p className="text-indigo-300 text-sm">
+                Los subproductos son elaboraciones intermedias (ej: prepizza, masa, salsa) que consumen insumos y se usan como ingredientes en las recetas de los productos finales.
+              </p>
+            </div>
+
+            {subProducts.length === 0 ? (
+              <div className="bg-gray-800 rounded-xl border border-gray-700 p-12 text-center">
+                <FlaskConical className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 text-lg font-medium">No hay subproductos cargados</p>
+                <button
+                  onClick={openAddSp}
+                  className="mt-4 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 mx-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  Crear Subproducto
+                </button>
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {subProducts.map(sp => (
+                  <div key={sp.id} className="bg-gray-800 rounded-xl border border-indigo-500/30 p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <FlaskConical className="w-4 h-4 text-indigo-400" />
+                          <p className="text-white font-semibold text-lg">{sp.name}</p>
+                        </div>
+                        <p className="text-gray-500 text-xs mt-0.5">Unidad: {sp.unit}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => openEditSp(sp)}
+                          className="p-1.5 text-gray-400 hover:text-white rounded"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { if (confirm(`Eliminar ${sp.name}?`)) deleteSubProduct(sp.id); }}
+                          className="p-1.5 text-gray-400 hover:text-red-400 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {sp.recipe.length === 0 ? (
+                      <p className="text-gray-600 text-sm italic">Sin receta cargada</p>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Receta por unidad</p>
+                        {sp.recipe.map(r => (
+                          <div key={r.rawMaterialId} className="flex justify-between items-center text-sm bg-gray-700/50 rounded px-3 py-1.5">
+                            <span className="text-gray-300">{r.rawMaterialName}</span>
+                            <span className="text-indigo-400 font-medium">{r.quantity} {r.unit}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {/* ── INGRESAR MERCADERIA ── */}
         {activeTab === 'ingresar' && (
           <div className="max-w-lg">
@@ -278,12 +421,12 @@ export default function Stock() {
 
               {rawMaterials.length === 0 ? (
                 <p className="text-gray-400 text-center py-6">
-                  Primero agregá materias primas en la pestaña Inventario.
+                  Primero agregá insumos en la pestaña Insumos.
                 </p>
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-gray-400 text-sm block mb-1">Materia Prima *</label>
+                    <label className="text-gray-400 text-sm block mb-1">Insumo *</label>
                     <select
                       value={ingresoMaterialId}
                       onChange={e => setIngresoMaterialId(e.target.value)}
@@ -424,7 +567,7 @@ export default function Stock() {
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full">
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-xl font-bold text-white">
-                {editingMaterial ? 'Editar Insumo' : 'Nueva Materia Prima'}
+                {editingMaterial ? 'Editar Insumo' : 'Nuevo Insumo'}
               </h2>
               <button onClick={() => setShowMaterialModal(false)} className="text-gray-400 hover:text-white">
                 <X className="w-6 h-6" />
@@ -499,6 +642,131 @@ export default function Stock() {
               >
                 <Save className="w-5 h-5" />
                 {editingMaterial ? 'Guardar' : 'Crear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SubProduct Modal */}
+      {showSpModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div
+            className="bg-gray-800 rounded-xl border border-indigo-500/50 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <FlaskConical className="w-5 h-5 text-indigo-400" />
+                {editingSp ? 'Editar Subproducto' : 'Nuevo Subproducto'}
+              </h2>
+              <button onClick={() => setShowSpModal(false)} className="text-gray-400 hover:text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-400 text-sm block mb-1">Nombre *</label>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={spForm.name}
+                    onChange={e => setSpForm({ ...spForm, name: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-indigo-500 focus:outline-none"
+                    placeholder="Ej: Prepizza, Masa..."
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm block mb-1">Unidad</label>
+                  <select
+                    value={spForm.unit}
+                    onChange={e => setSpForm({ ...spForm, unit: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-indigo-500 focus:outline-none"
+                  >
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Recipe */}
+              <div className="border-t border-gray-700 pt-4">
+                <label className="text-gray-400 text-sm block mb-3">
+                  Receta — insumos por unidad de {spForm.name || 'subproducto'}
+                </label>
+
+                {spRecipe.length > 0 && (
+                  <div className="space-y-1 mb-3">
+                    {spRecipe.map(r => (
+                      <div key={r.rawMaterialId} className="flex items-center justify-between bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
+                        <span className="text-white">{r.rawMaterialName}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-indigo-400 font-medium">{r.quantity} {r.unit}</span>
+                          <button onClick={() => removeSpRecipeItem(r.rawMaterialId!)} className="text-gray-500 hover:text-red-400">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {rawMaterials.length === 0 ? (
+                  <p className="text-gray-500 text-sm italic">Primero agregá insumos en la pestaña Insumos.</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <select
+                      value={spMatId}
+                      onChange={e => setSpMatId(e.target.value)}
+                      className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-indigo-500 focus:outline-none text-sm"
+                    >
+                      <option value="">Seleccionar insumo...</option>
+                      {rawMaterials
+                        .filter(m => !spRecipe.some(r => r.rawMaterialId === m.id))
+                        .map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                        ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={spQty}
+                      onChange={e => setSpQty(e.target.value)}
+                      className="w-24 bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-indigo-500 focus:outline-none text-sm text-center"
+                      placeholder="Cant."
+                      min="0"
+                      step="0.01"
+                    />
+                    <button
+                      onClick={addSpRecipeItem}
+                      disabled={!spMatId || !spQty || Number(spQty) <= 0}
+                      className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:text-gray-400 text-white px-3 py-2 rounded-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSpModal(false)}
+                className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveSp}
+                disabled={!spForm.name.trim()}
+                className={`flex-1 py-2 rounded-lg font-bold flex items-center justify-center gap-2 ${
+                  spForm.name.trim()
+                    ? 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                <Save className="w-5 h-5" />
+                {editingSp ? 'Guardar' : 'Crear'}
               </button>
             </div>
           </div>
