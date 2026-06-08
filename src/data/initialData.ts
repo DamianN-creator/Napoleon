@@ -1,4 +1,4 @@
-import { Product } from '../types';
+import { Product, Extra } from '../types';
 
 export const initialProducts: Product[] = [
   // Pizzas
@@ -278,15 +278,15 @@ export const initialProducts: Product[] = [
   },
 ];
 
-export const pizzaExtras = [
-  { id: 'extra-muzzarella', name: 'Muzzarella extra', price: 200 },
-  { id: 'extra-jamon', name: 'Jamon extra', price: 200 },
-  { id: 'extra-aceitunas', name: 'Aceitunas', price: 150 },
-  { id: 'extra-huevo', name: 'Huevo', price: 100 },
-  { id: 'extra-morron', name: 'Morron', price: 150 },
-  { id: 'extra-anana', name: 'Anana', price: 150 },
-  { id: 'extra-roquefort', name: 'Roquefort extra', price: 250 },
-  { id: 'extra-queso', name: 'Queso dambo', price: 200 },
+export const initialExtras: Extra[] = [
+  { id: 'extra-muzzarella', name: 'Muzzarella extra', price: 200, available: true, createdAt: new Date() },
+  { id: 'extra-jamon', name: 'Jamon extra', price: 200, available: true, createdAt: new Date() },
+  { id: 'extra-aceitunas', name: 'Aceitunas', price: 150, available: true, createdAt: new Date() },
+  { id: 'extra-huevo', name: 'Huevo', price: 100, available: true, createdAt: new Date() },
+  { id: 'extra-morron', name: 'Morron', price: 150, available: true, createdAt: new Date() },
+  { id: 'extra-anana', name: 'Anana', price: 150, available: true, createdAt: new Date() },
+  { id: 'extra-roquefort', name: 'Roquefort extra', price: 250, available: true, createdAt: new Date() },
+  { id: 'extra-queso', name: 'Queso dambo', price: 200, available: true, createdAt: new Date() },
 ];
 
 export const orderStatusColors: Record<string, string> = {

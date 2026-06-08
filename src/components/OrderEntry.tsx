@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, OrderItem, OrderType, PaymentMethod, Customer } from '../types';
-import { initialProducts, pizzaExtras, categoryLabels, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
+import { initialProducts, categoryLabels, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
 import {
   Plus,
   Trash2,
@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function OrderEntry() {
-  const { products, addOrder, customers, findCustomerByPhone, addCustomer, updateCustomerStats } = useApp();
+  const { products, extras, addOrder, customers, findCustomerByPhone, addCustomer, updateCustomerStats } = useApp();
 
   // Order state
   const [customerName, setCustomerName] = useState('');
@@ -289,7 +289,7 @@ export default function OrderEntry() {
   const saveExtras = () => {
     if (currentItemForExtras) {
       const extrasPrice = selectedExtras.reduce((sum, extraId) => {
-        const extra = pizzaExtras.find(e => e.id === extraId);
+        const extra = extras.find(e => e.id === extraId);
         return sum + (extra?.price || 0);
       }, 0);
 
@@ -692,7 +692,7 @@ export default function OrderEntry() {
 
                     {item.extras && item.extras.length > 0 && (
                       <div className="text-xs text-yellow-400 mb-2">
-                        Extras: {item.extras.map(e => pizzaExtras.find(p => p.id === e)?.name).join(', ')}
+                        Extras: {item.extras.map(e => extras.find(p => p.id === e)?.name).join(', ')}
                       </div>
                     )}
 
@@ -934,7 +934,7 @@ export default function OrderEntry() {
             <p className="text-gray-400 text-sm mb-4">{currentItemForExtras.productName}</p>
 
             <div className="space-y-2 mb-4">
-              {pizzaExtras.map(extra => (
+              {extras.filter(e => e.available).map(extra => (
                 <label
                   key={extra.id}
                   className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
@@ -961,6 +961,9 @@ export default function OrderEntry() {
                   <span className="text-yellow-400 font-medium">+${extra.price}</span>
                 </label>
               ))}
+              {extras.filter(e => e.available).length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">No hay extras disponibles configurados.</p>
+              )}
             </div>
 
             <div className="flex gap-3">

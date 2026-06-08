@@ -206,6 +206,14 @@ export interface SubProduct {
   createdAt: Date;
 }
 
+export interface Extra {
+  id: string;
+  name: string;
+  price: number;
+  available: boolean;
+  createdAt: Date;
+}
+
 export interface AppState {
   products: Product[];
   orders: Order[];
@@ -218,4 +226,5 @@ export interface AppState {
   rawMaterials: RawMaterial[];
   stockMovements: StockMovement[];
   subProducts: SubProduct[];
+  extras: Extra[];
 }

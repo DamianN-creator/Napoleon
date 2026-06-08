@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, CompletedOrder, AppState, RawMaterial, StockMovement, SubProduct } from '../types';
-import { initialProducts } from '../data/initialData';
+import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, CompletedOrder, AppState, RawMaterial, StockMovement, SubProduct, Extra } from '../types';
+import { initialProducts, initialExtras } from '../data/initialData';
 
 interface AppContextType extends AppState {
   // Products
@@ -20,6 +20,11 @@ interface AppContextType extends AppState {
   addSubProduct: (sp: SubProduct) => void;
   updateSubProduct: (sp: SubProduct) => void;
   deleteSubProduct: (id: string) => void;
+
+  // Extras
+  addExtra: (extra: Extra) => void;
+  updateExtra: (extra: Extra) => void;
+  deleteExtra: (id: string) => void;
 
   // Orders
   addOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => Order;
@@ -71,6 +76,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [rawMaterials, setRawMaterials] = useLocalStorage<RawMaterial[]>('pizzeria-raw-materials', []);
   const [stockMovements, setStockMovements] = useLocalStorage<StockMovement[]>('pizzeria-stock-movements', []);
   const [subProducts, setSubProducts] = useLocalStorage<SubProduct[]>('pizzeria-sub-products', []);
+  const [extras, setExtras] = useLocalStorage<Extra[]>('pizzeria-extras', initialExtras);
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -226,6 +232,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteSubProduct = useCallback((id: string) => {
     setSubProducts(prev => prev.filter(s => s.id !== id));
   }, [setSubProducts]);
+
+  // Extras
+  const addExtra = useCallback((extra: Extra) => {
+    setExtras(prev => [...prev, extra]);
+  }, [setExtras]);
+
+  const updateExtra = useCallback((extra: Extra) => {
+    setExtras(prev => prev.map(e => e.id === extra.id ? extra : e));
+  }, [setExtras]);
+
+  const deleteExtra = useCallback((id: string) => {
+    setExtras(prev => prev.filter(e => e.id !== id));
+  }, [setExtras]);
 
   // Send order: assign cadete and set status to enviado
   const sendOrder = useCallback((orderId: string, cadeteId: string) => {
@@ -575,6 +594,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     rawMaterials,
     stockMovements,
     subProducts,
+    extras,
     isLoading,
     addProduct,
     updateProduct,
@@ -610,6 +630,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addSubProduct,
     updateSubProduct,
     deleteSubProduct,
+    addExtra,
+    updateExtra,
+    deleteExtra,
   }), [
     products,
     orders,
@@ -622,6 +645,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     rawMaterials,
     stockMovements,
     subProducts,
+    extras,
     isLoading,
     addProduct,
     updateProduct,
@@ -657,6 +681,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addSubProduct,
     updateSubProduct,
     deleteSubProduct,
+    addExtra,
+    updateExtra,
+    deleteExtra,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

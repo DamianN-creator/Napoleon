@@ -14,6 +14,7 @@ import {
   Bot,
   Boxes,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,6 +34,7 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
     { id: 'cadetes', label: 'Cadetes', icon: Bike },
     { id: 'customers', label: 'Clientes', icon: Users },
     { id: 'products', label: 'Productos', icon: Pizza },
+    { id: 'extras', label: 'Extras', icon: Sparkles },
     { id: 'stock', label: 'Stock', icon: Boxes },
     { id: 'whatsapp', label: 'WhatsApp Bot', icon: Bot },
     { id: 'history', label: 'Historial de Ventas', icon: History },

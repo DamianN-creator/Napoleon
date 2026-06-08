@@ -7,6 +7,7 @@ import Kitchen from './components/Kitchen';
 import ActiveOrders from './components/ActiveOrders';
 import Customers from './components/Customers';
 import Products from './components/Products';
+import Extras from './components/Extras';
 import CashClosing from './components/CashClosing';
 import SalesHistory from './components/SalesHistory';
 import ProductsRanking from './components/ProductsRanking';
@@ -161,6 +162,8 @@ function AppContent() {
         return <Customers />;
       case 'products':
         return <Products />;
+      case 'extras':
+        return <Extras />;
       case 'stock':
         return <Stock />;
       case 'whatsapp':
