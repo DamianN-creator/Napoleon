@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Download, Upload, AlertTriangle, CheckCircle, Settings as SettingsIcon, Database } from 'lucide-react';
+import { Download, Upload, AlertTriangle, CheckCircle, Settings as SettingsIcon, Database, Trash2 } from 'lucide-react';
 
 const STORAGE_PREFIX = 'pizzeria';
 
@@ -8,6 +8,7 @@ export default function Settings() {
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [importError, setImportError] = useState('');
   const [importPreview, setImportPreview] = useState<string[]>([]);
+  const [confirmClear, setConfirmClear] = useState<'ventas' | 'cajas' | 'todo' | null>(null);
 
   const handleExport = () => {
     const data: Record<string, string> = {};
@@ -66,6 +67,27 @@ export default function Settings() {
 
     setImportStatus('success');
     setTimeout(() => window.location.reload(), 1500);
+  };
+
+  const handleClearVentas = () => {
+    localStorage.removeItem('pizzeria-completed-orders');
+    localStorage.removeItem('pizzeria-reports');
+    setConfirmClear(null);
+    window.location.reload();
+  };
+
+  const handleClearCajas = () => {
+    localStorage.removeItem('pizzeria-cash-shifts');
+    setConfirmClear(null);
+    window.location.reload();
+  };
+
+  const handleClearTodo = () => {
+    localStorage.removeItem('pizzeria-completed-orders');
+    localStorage.removeItem('pizzeria-reports');
+    localStorage.removeItem('pizzeria-cash-shifts');
+    setConfirmClear(null);
+    window.location.reload();
   };
 
   const storageKeys = Object.keys(localStorage).filter(k => k.startsWith(STORAGE_PREFIX));
@@ -146,6 +168,71 @@ export default function Settings() {
             <Download className="w-5 h-5" />
             Descargar Backup
           </button>
+        </div>
+
+        {/* Clear history */}
+        <div className="bg-gray-800 rounded-xl border border-red-900/40 p-5 mb-5">
+          <h2 className="text-white font-semibold mb-1 flex items-center gap-2">
+            <Trash2 className="w-5 h-5 text-red-400" />
+            Borrar historial
+          </h2>
+          <p className="text-gray-400 text-sm mb-4">
+            Eliminá el historial de ventas y/o cajas. <span className="text-red-400">Esta acción no se puede deshacer.</span>
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setConfirmClear('ventas')}
+              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-900/70 text-red-300 border border-red-800/50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Borrar historial de ventas
+            </button>
+            <button
+              onClick={() => setConfirmClear('cajas')}
+              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-900/70 text-red-300 border border-red-800/50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Borrar historial de cajas
+            </button>
+            <button
+              onClick={() => setConfirmClear('todo')}
+              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-700/50 hover:bg-red-700/80 text-red-200 border border-red-600/50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Borrar ventas y cajas
+            </button>
+          </div>
+
+          {confirmClear && (
+            <div className="mt-4 bg-red-500/10 border border-red-500/40 rounded-lg p-4">
+              <div className="flex items-start gap-2 mb-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-300 font-medium text-sm">
+                    {confirmClear === 'ventas' && '¿Borrar todo el historial de ventas?'}
+                    {confirmClear === 'cajas' && '¿Borrar todo el historial de cajas?'}
+                    {confirmClear === 'todo' && '¿Borrar historial de ventas y cajas?'}
+                  </p>
+                  <p className="text-red-300/60 text-xs mt-0.5">No hay forma de recuperar estos datos.</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmClear(null)}
+                  className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmClear === 'ventas' ? handleClearVentas : confirmClear === 'cajas' ? handleClearCajas : handleClearTodo}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-colors"
+                >
+                  Borrar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Import */}
