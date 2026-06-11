@@ -15,7 +15,9 @@ import {
   Boxes,
   Settings,
   Sparkles,
+  LogOut,
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface SidebarProps {
   activeTab: string;
@@ -104,9 +106,13 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
 
         {/* Footer */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
-          <p className="text-gray-500 text-xs text-center">
-            Local Storage Only
-          </p>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="w-full flex items-center justify-center gap-2 text-gray-400 hover:text-white text-sm py-2 rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Cerrar sesión
+          </button>
         </div>
       </aside>
     </>

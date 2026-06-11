@@ -1,20 +1,92 @@
-import React, { useRef, useState } from 'react';
-import { Download, Upload, AlertTriangle, CheckCircle, Settings as SettingsIcon, Database, Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Download, Upload, AlertTriangle, CheckCircle, Settings as SettingsIcon, Database, Trash2, RefreshCw } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_PREFIX = 'pizzeria';
 
+type TableConfig =
+  | { type: 'table'; table: string }
+  | { type: 'setting'; settingKey: string };
+
+const TABLE_MAP: Record<string, TableConfig> = {
+  'pizzeria-products': { type: 'table', table: 'products' },
+  'pizzeria-orders': { type: 'table', table: 'orders' },
+  'pizzeria-customers': { type: 'table', table: 'customers' },
+  'pizzeria-cadetes': { type: 'table', table: 'cadetes' },
+  'pizzeria-reports': { type: 'table', table: 'daily_reports' },
+  'pizzeria-cash-shifts': { type: 'table', table: 'cash_shifts' },
+  'pizzeria-completed-orders': { type: 'table', table: 'completed_orders' },
+  'pizzeria-raw-materials': { type: 'table', table: 'raw_materials' },
+  'pizzeria-stock-movements': { type: 'table', table: 'stock_movements' },
+  'pizzeria-sub-products': { type: 'table', table: 'sub_products' },
+  'pizzeria-extras': { type: 'table', table: 'extras' },
+  'pizzeria-order-number': { type: 'setting', settingKey: 'currentOrderNumber' },
+};
+
+const keyLabels: Record<string, string> = {
+  'pizzeria-products': 'Productos',
+  'pizzeria-orders': 'Pedidos activos',
+  'pizzeria-customers': 'Clientes',
+  'pizzeria-cadetes': 'Cadetes',
+  'pizzeria-reports': 'Reportes',
+  'pizzeria-cash-shifts': 'Turnos de caja',
+  'pizzeria-completed-orders': 'Historial de pedidos',
+  'pizzeria-order-number': 'Número de pedido',
+  'pizzeria-raw-materials': 'Insumos',
+  'pizzeria-stock-movements': 'Movimientos de stock',
+  'pizzeria-sub-products': 'Subproductos',
+  'pizzeria-extras': 'Extras',
+};
+
 export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const parsedDataRef = useRef<Record<string, string> | null>(null);
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [loadingCounts, setLoadingCounts] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [clearing, setClearing] = useState<'ventas' | 'cajas' | 'todo' | null>(null);
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [importError, setImportError] = useState('');
   const [importPreview, setImportPreview] = useState<string[]>([]);
   const [confirmClear, setConfirmClear] = useState<'ventas' | 'cajas' | 'todo' | null>(null);
 
-  const handleExport = () => {
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      const entries = await Promise.all(
+        Object.entries(TABLE_MAP).map(async ([key, cfg]): Promise<[string, string]> => {
+          if (cfg.type === 'table') {
+            const { count } = await supabase.from(cfg.table).select('id', { count: 'exact', head: true });
+            return [key, `${count ?? 0} registros`];
+          }
+          const { data } = await supabase.from('app_settings').select('value').eq('key', cfg.settingKey).maybeSingle();
+          return [key, data ? String(data.value) : '—'];
+        })
+      );
+
+      if (!active) return;
+      setCounts(Object.fromEntries(entries));
+      setLoadingCounts(false);
+    })();
+
+    return () => { active = false; };
+  }, []);
+
+  const handleExport = async () => {
+    setExporting(true);
     const data: Record<string, string> = {};
-    Object.keys(localStorage)
-      .filter(k => k.startsWith(STORAGE_PREFIX))
-      .forEach(k => { data[k] = localStorage.getItem(k) ?? ''; });
+
+    for (const [key, cfg] of Object.entries(TABLE_MAP)) {
+      if (cfg.type === 'table') {
+        const { data: rows } = await supabase.from(cfg.table).select('data');
+        data[key] = JSON.stringify((rows ?? []).map(row => row.data));
+      } else {
+        const { data: row } = await supabase.from('app_settings').select('value').eq('key', cfg.settingKey).maybeSingle();
+        data[key] = JSON.stringify(row ? row.value : 1);
+      }
+    }
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -24,6 +96,7 @@ export default function Settings() {
     a.download = `napoleon-backup-${date}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    setExporting(false);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,9 +119,7 @@ export default function Settings() {
         setImportPreview(keys);
         setImportStatus('idle');
         setImportError('');
-
-        // Store parsed data temporarily in a hidden attribute for confirmation
-        (fileInputRef.current as any)._parsedData = data;
+        parsedDataRef.current = data;
       } catch {
         setImportStatus('error');
         setImportError('Archivo inválido. Asegurate de seleccionar un backup de Napoleon.');
@@ -57,53 +128,51 @@ export default function Settings() {
     reader.readAsText(file);
   };
 
-  const handleImportConfirm = () => {
-    const data = (fileInputRef.current as any)?._parsedData as Record<string, string> | undefined;
+  const handleImportConfirm = async () => {
+    const data = parsedDataRef.current;
     if (!data) return;
 
-    Object.entries(data)
-      .filter(([k]) => k.startsWith(STORAGE_PREFIX))
-      .forEach(([k, v]) => localStorage.setItem(k, v));
+    setImporting(true);
 
+    for (const [key, raw] of Object.entries(data)) {
+      const cfg = TABLE_MAP[key];
+      if (!cfg) continue;
+
+      if (cfg.type === 'table') {
+        const items = JSON.parse(raw) as Array<{ id: string }>;
+        if (items.length === 0) continue;
+        const rows = items.map(item => ({ id: item.id, data: item, updated_at: new Date().toISOString() }));
+        await supabase.from(cfg.table).upsert(rows);
+      } else {
+        const value = JSON.parse(raw);
+        await supabase.from('app_settings').upsert({ key: cfg.settingKey, value, updated_at: new Date().toISOString() });
+      }
+    }
+
+    setImporting(false);
     setImportStatus('success');
     setTimeout(() => window.location.reload(), 1500);
   };
 
-  const handleClearVentas = () => {
-    localStorage.removeItem('pizzeria-completed-orders');
-    localStorage.removeItem('pizzeria-reports');
-    setConfirmClear(null);
+  const handleClearVentas = async () => {
+    setClearing('ventas');
+    await supabase.from('completed_orders').delete().neq('id', '');
+    await supabase.from('daily_reports').delete().neq('id', '');
     window.location.reload();
   };
 
-  const handleClearCajas = () => {
-    localStorage.removeItem('pizzeria-cash-shifts');
-    setConfirmClear(null);
+  const handleClearCajas = async () => {
+    setClearing('cajas');
+    await supabase.from('cash_shifts').delete().neq('id', '');
     window.location.reload();
   };
 
-  const handleClearTodo = () => {
-    localStorage.removeItem('pizzeria-completed-orders');
-    localStorage.removeItem('pizzeria-reports');
-    localStorage.removeItem('pizzeria-cash-shifts');
-    setConfirmClear(null);
+  const handleClearTodo = async () => {
+    setClearing('todo');
+    await supabase.from('completed_orders').delete().neq('id', '');
+    await supabase.from('daily_reports').delete().neq('id', '');
+    await supabase.from('cash_shifts').delete().neq('id', '');
     window.location.reload();
-  };
-
-  const storageKeys = Object.keys(localStorage).filter(k => k.startsWith(STORAGE_PREFIX));
-
-  const keyLabels: Record<string, string> = {
-    'pizzeria-products': 'Productos',
-    'pizzeria-orders': 'Pedidos activos',
-    'pizzeria-customers': 'Clientes',
-    'pizzeria-cadetes': 'Cadetes',
-    'pizzeria-reports': 'Reportes',
-    'pizzeria-cash-shifts': 'Turnos de caja',
-    'pizzeria-completed-orders': 'Historial de pedidos',
-    'pizzeria-order-number': 'Número de pedido',
-    'pizzeria-raw-materials': 'Insumos',
-    'pizzeria-stock-movements': 'Movimientos de stock',
-    'pizzeria-sub-products': 'Subproductos',
   };
 
   return (
@@ -122,27 +191,21 @@ export default function Settings() {
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-5">
           <div className="flex items-center gap-2 mb-4">
             <Database className="w-5 h-5 text-gray-400" />
-            <h2 className="text-white font-semibold">Datos almacenados localmente</h2>
+            <h2 className="text-white font-semibold">Datos almacenados en Supabase</h2>
           </div>
-          {storageKeys.length === 0 ? (
-            <p className="text-gray-500 text-sm">No hay datos almacenados.</p>
+          {loadingCounts ? (
+            <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Cargando...
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              {storageKeys.map(k => {
-                let count = '—';
-                try {
-                  const val = JSON.parse(localStorage.getItem(k) ?? '');
-                  if (Array.isArray(val)) count = `${val.length} registros`;
-                  else if (typeof val === 'number') count = String(val);
-                  else count = 'configurado';
-                } catch {}
-                return (
-                  <div key={k} className="flex justify-between items-center bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
-                    <span className="text-gray-300">{keyLabels[k] ?? k}</span>
-                    <span className="text-gray-500 text-xs">{count}</span>
-                  </div>
-                );
-              })}
+              {Object.entries(TABLE_MAP).map(([k]) => (
+                <div key={k} className="flex justify-between items-center bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
+                  <span className="text-gray-300">{keyLabels[k] ?? k}</span>
+                  <span className="text-gray-500 text-xs">{counts[k] ?? '—'}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -154,18 +217,18 @@ export default function Settings() {
             Exportar datos
           </h2>
           <p className="text-gray-400 text-sm mb-4">
-            Descargá un archivo JSON con todos los datos de la app. Usalo para hacer backup o para importarlos en otro dispositivo/navegador.
+            Descargá un archivo JSON con todos los datos de la app. Usalo para hacer backup o para importarlos en otro lugar.
           </p>
           <button
             onClick={handleExport}
-            disabled={storageKeys.length === 0}
+            disabled={exporting}
             className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ${
-              storageKeys.length > 0
+              !exporting
                 ? 'bg-green-500 hover:bg-green-600 text-white'
                 : 'bg-gray-600 text-gray-400 cursor-not-allowed'
             }`}
           >
-            <Download className="w-5 h-5" />
+            {exporting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
             Descargar Backup
           </button>
         </div>
@@ -183,21 +246,24 @@ export default function Settings() {
           <div className="flex flex-col gap-2">
             <button
               onClick={() => setConfirmClear('ventas')}
-              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-900/70 text-red-300 border border-red-800/50 transition-colors"
+              disabled={clearing !== null}
+              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-900/70 text-red-300 border border-red-800/50 transition-colors disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
               Borrar historial de ventas
             </button>
             <button
               onClick={() => setConfirmClear('cajas')}
-              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-900/70 text-red-300 border border-red-800/50 transition-colors"
+              disabled={clearing !== null}
+              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-900/40 hover:bg-red-900/70 text-red-300 border border-red-800/50 transition-colors disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
               Borrar historial de cajas
             </button>
             <button
               onClick={() => setConfirmClear('todo')}
-              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-700/50 hover:bg-red-700/80 text-red-200 border border-red-600/50 transition-colors"
+              disabled={clearing !== null}
+              className="w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-red-700/50 hover:bg-red-700/80 text-red-200 border border-red-600/50 transition-colors disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
               Borrar ventas y cajas
@@ -220,14 +286,17 @@ export default function Settings() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setConfirmClear(null)}
-                  className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  disabled={clearing !== null}
+                  className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={confirmClear === 'ventas' ? handleClearVentas : confirmClear === 'cajas' ? handleClearCajas : handleClearTodo}
-                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-colors"
+                  disabled={clearing !== null}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
+                  {clearing === confirmClear ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
                   Borrar
                 </button>
               </div>
@@ -255,7 +324,8 @@ export default function Settings() {
 
           <button
             onClick={() => { setImportPreview([]); setImportStatus('idle'); fileInputRef.current?.click(); }}
-            className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white transition-colors mb-3"
+            disabled={importing}
+            className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white transition-colors mb-3 disabled:opacity-50"
           >
             <Upload className="w-5 h-5" />
             Seleccionar archivo
@@ -282,7 +352,7 @@ export default function Settings() {
                 <div>
                   <p className="text-yellow-400 font-medium text-sm">¿Confirmar importación?</p>
                   <p className="text-yellow-300/70 text-xs mt-0.5">
-                    Se van a importar {importPreview.length} secciones de datos. Los datos actuales serán reemplazados.
+                    Se van a importar {importPreview.length} secciones de datos. Los registros existentes con el mismo id serán reemplazados.
                   </p>
                 </div>
               </div>
@@ -295,9 +365,10 @@ export default function Settings() {
               </div>
               <button
                 onClick={handleImportConfirm}
-                className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+                disabled={importing}
+                className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <CheckCircle className="w-5 h-5" />
+                {importing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
                 Confirmar e Importar
               </button>
             </div>

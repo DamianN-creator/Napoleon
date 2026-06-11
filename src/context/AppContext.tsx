@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useSupabaseTable, useSupabaseValue } from '../hooks/useSupabaseTable';
+import { useAuth } from './AuthContext';
 import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, CompletedOrder, AppState, RawMaterial, StockMovement, SubProduct, Extra } from '../types';
 import { initialProducts, initialExtras } from '../data/initialData';
 
@@ -65,24 +66,27 @@ interface AppContextType extends AppState {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [products, setProducts] = useLocalStorage<Product[]>('pizzeria-products', initialProducts);
-  const [orders, setOrders] = useLocalStorage<Order[]>('pizzeria-orders', []);
-  const [customers, setCustomers] = useLocalStorage<Customer[]>('pizzeria-customers', []);
-  const [cadetes, setCadetes] = useLocalStorage<Cadete[]>('pizzeria-cadetes', []);
-  const [dailyReports, setDailyReports] = useLocalStorage<DailyReport[]>('pizzeria-reports', []);
-  const [cashShifts, setCashShifts] = useLocalStorage<CashShift[]>('pizzeria-cash-shifts', []);
-  const [completedOrders, setCompletedOrders] = useLocalStorage<CompletedOrder[]>('pizzeria-completed-orders', []);
-  const [currentOrderNumber, setCurrentOrderNumber] = useLocalStorage<number>('pizzeria-order-number', 1);
-  const [rawMaterials, setRawMaterials] = useLocalStorage<RawMaterial[]>('pizzeria-raw-materials', []);
-  const [stockMovements, setStockMovements] = useLocalStorage<StockMovement[]>('pizzeria-stock-movements', []);
-  const [subProducts, setSubProducts] = useLocalStorage<SubProduct[]>('pizzeria-sub-products', []);
-  const [extras, setExtras] = useLocalStorage<Extra[]>('pizzeria-extras', initialExtras);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const { session } = useAuth();
+  const [products, setProducts, productsLoading] = useSupabaseTable<Product>('products', initialProducts, session);
+  const [orders, setOrders, ordersLoading] = useSupabaseTable<Order>('orders', [], session);
+  const [customers, setCustomers, customersLoading] = useSupabaseTable<Customer>('customers', [], session);
+  const [cadetes, setCadetes, cadetesLoading] = useSupabaseTable<Cadete>('cadetes', [], session);
+  const [dailyReports, setDailyReports, dailyReportsLoading] = useSupabaseTable<DailyReport>('daily_reports', [], session);
+  const [cashShifts, setCashShifts, cashShiftsLoading] = useSupabaseTable<CashShift>('cash_shifts', [], session);
+  const [completedOrders, setCompletedOrders, completedOrdersLoading] = useSupabaseTable<CompletedOrder>('completed_orders', [], session);
+  const [currentOrderNumber, setCurrentOrderNumber, orderNumberLoading] = useSupabaseValue<number>('currentOrderNumber', 1, session);
+  const [rawMaterials, setRawMaterials, rawMaterialsLoading] = useSupabaseTable<RawMaterial>('raw_materials', [], session);
+  const [stockMovements, setStockMovements, stockMovementsLoading] = useSupabaseTable<StockMovement>('stock_movements', [], session);
+  const [subProducts, setSubProducts, subProductsLoading] = useSupabaseTable<SubProduct>('sub_products', [], session);
+  const [extras, setExtras, extrasLoading] = useSupabaseTable<Extra>('extras', initialExtras, session);
 
-  React.useEffect(() => {
-    setIsLoading(false);
-  }, []);
+  const isLoading = productsLoading || ordersLoading || customersLoading || cadetesLoading ||
+    dailyReportsLoading || cashShiftsLoading || completedOrdersLoading || orderNumberLoading ||
+    rawMaterialsLoading || stockMovementsLoading || subProductsLoading || extrasLoading;
 
+  // Read-then-write, not atomic across devices: two simultaneous orders from
+  // different devices could get the same orderNumber. It's a display label,
+  // not a primary key, so this is an accepted limitation for now.
   const getNextOrderNumber = useCallback(() => {
     const num = currentOrderNumber;
     setCurrentOrderNumber(num + 1);

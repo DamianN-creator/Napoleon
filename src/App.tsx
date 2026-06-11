@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import OrderEntry from './components/OrderEntry';
@@ -15,7 +17,7 @@ import Cadetes from './components/Cadetes';
 import WhatsAppBot from './components/WhatsAppBot';
 import Stock from './components/Stock';
 import Settings from './components/Settings';
-import { Menu, DollarSign, Lock, Clock } from 'lucide-react';
+import { Menu, DollarSign, Lock, Clock, RefreshCw } from 'lucide-react';
 
 function AppContent() {
   const { getActiveCashShift, openCashShift, cashShifts, isLoading } = useApp();
@@ -210,11 +212,33 @@ function AppContent() {
   );
 }
 
-function App() {
+function AuthGate() {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <RefreshCw className="w-8 h-8 text-yellow-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login />;
+  }
+
   return (
     <AppProvider>
       <AppContent />
     </AppProvider>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
   );
 }
 

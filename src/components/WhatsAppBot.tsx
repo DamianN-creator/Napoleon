@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import {
   Bot,
   MessageCircle,
@@ -19,11 +19,6 @@ import {
   Copy,
   ExternalLink,
 } from 'lucide-react';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 interface WhatsAppConfig {
   id: string;
