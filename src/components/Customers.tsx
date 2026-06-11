@@ -18,10 +18,11 @@ import {
 } from 'lucide-react';
 
 export default function Customers() {
-  const { customers, orders, addCustomer, updateCustomer } = useApp();
+  const { customers, orders, addCustomer, updateCustomer, deleteCustomer } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'spent' | 'orders'>('spent');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [showDetail, setShowDetail] = useState<Customer | null>(null);
 
   // Form state
@@ -48,23 +49,48 @@ export default function Customers() {
     return result;
   }, [customers, searchTerm, sortBy]);
 
-  const handleAddCustomer = () => {
+  const closeModal = () => {
+    setShowAddModal(false);
+    setEditingCustomer(null);
+    setFormData({ name: '', phone: '', address: '' });
+  };
+
+  const openEditModal = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setFormData({ name: customer.name, phone: customer.phone, address: customer.address || '' });
+  };
+
+  const handleDeleteCustomer = (customer: Customer) => {
+    if (!confirm(`Eliminar a ${customer.name}? Esta accion no se puede deshacer.`)) return;
+    deleteCustomer(customer.id);
+    if (showDetail?.id === customer.id) setShowDetail(null);
+  };
+
+  const handleSaveCustomer = () => {
     if (!formData.name.trim() || !formData.phone.trim()) return;
 
-    const newCustomer: Customer = {
-      id: `customer-${Date.now()}`,
-      name: formData.name,
-      phone: formData.phone,
-      address: formData.address || undefined,
-      createdAt: new Date(),
-      totalSpent: 0,
-      orderCount: 0,
-      orderHistory: [],
-    };
+    if (editingCustomer) {
+      updateCustomer({
+        ...editingCustomer,
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address || undefined,
+      });
+    } else {
+      const newCustomer: Customer = {
+        id: `customer-${Date.now()}`,
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address || undefined,
+        createdAt: new Date(),
+        totalSpent: 0,
+        orderCount: 0,
+        orderHistory: [],
+      };
+      addCustomer(newCustomer);
+    }
 
-    addCustomer(newCustomer);
-    setFormData({ name: '', phone: '', address: '' });
-    setShowAddModal(false);
+    closeModal();
   };
 
   const getCustomerOrders = (customerId: string) => {
@@ -95,7 +121,7 @@ export default function Customers() {
           </div>
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => { setEditingCustomer(null); setFormData({ name: '', phone: '', address: '' }); setShowAddModal(true); }}
             className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
           >
             <Users className="w-5 h-5" />
@@ -201,6 +227,22 @@ export default function Customers() {
                     <p className="text-gray-400 text-sm">{customer.phone}</p>
                   </div>
                 </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={e => { e.stopPropagation(); openEditModal(customer); }}
+                    className="text-gray-400 hover:text-pink-400 p-1"
+                    title="Editar cliente"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDeleteCustomer(customer); }}
+                    className="text-gray-400 hover:text-red-400 p-1"
+                    title="Eliminar cliente"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -232,19 +274,19 @@ export default function Customers() {
         )}
       </div>
 
-      {/* Add Customer Modal */}
-      {showAddModal && (
+      {/* Add/Edit Customer Modal */}
+      {(showAddModal || editingCustomer) && (
         <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAddModal(false)}
+          onClick={closeModal}
         >
           <div
             className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">Nuevo Cliente</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white">
+              <h2 className="text-xl font-bold text-white">{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</h2>
+              <button onClick={closeModal} className="text-gray-400 hover:text-white">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -286,13 +328,13 @@ export default function Customers() {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={closeModal}
                 className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
               >
                 Cancelar
               </button>
               <button
-                onClick={handleAddCustomer}
+                onClick={handleSaveCustomer}
                 disabled={!formData.name.trim() || !formData.phone.trim()}
                 className={`flex-1 py-2 rounded-lg transition-colors ${
                   formData.name.trim() && formData.phone.trim()
@@ -324,12 +366,28 @@ export default function Customers() {
                   <h2 className="text-2xl font-bold text-white">{showDetail.name}</h2>
                   <p className="text-pink-200">{showDetail.phone}</p>
                 </div>
-                <button
-                  onClick={() => setShowDetail(null)}
-                  className="text-white/80 hover:text-white text-2xl"
-                >
-                  &times;
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => { openEditModal(showDetail); setShowDetail(null); }}
+                    className="text-white/80 hover:text-white"
+                    title="Editar cliente"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCustomer(showDetail)}
+                    className="text-white/80 hover:text-white"
+                    title="Eliminar cliente"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowDetail(null)}
+                    className="text-white/80 hover:text-white text-2xl"
+                  >
+                    &times;
+                  </button>
+                </div>
               </div>
             </div>
 

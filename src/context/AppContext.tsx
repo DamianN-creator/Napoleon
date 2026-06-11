@@ -38,6 +38,7 @@ interface AppContextType extends AppState {
   // Customers
   addCustomer: (customer: Customer) => void;
   updateCustomer: (customer: Customer) => void;
+  deleteCustomer: (customerId: string) => void;
   findCustomerByPhone: (phone: string) => Customer | undefined;
   updateCustomerStats: (customerId: string, orderTotal: number, orderId: string) => void;
 
@@ -153,6 +154,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateCustomer = useCallback((customer: Customer) => {
     setCustomers(prev => prev.map(c => c.id === customer.id ? customer : c));
+  }, [setCustomers]);
+
+  const deleteCustomer = useCallback((customerId: string) => {
+    setCustomers(prev => prev.filter(c => c.id !== customerId));
   }, [setCustomers]);
 
   const findCustomerByPhone = useCallback((phone: string): Customer | undefined => {
@@ -611,6 +616,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     rendirOrder,
     addCustomer,
     updateCustomer,
+    deleteCustomer,
     findCustomerByPhone,
     updateCustomerStats,
     addCadete,
@@ -662,6 +668,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     rendirOrder,
     addCustomer,
     updateCustomer,
+    deleteCustomer,
     findCustomerByPhone,
     updateCustomerStats,
     addCadete,
