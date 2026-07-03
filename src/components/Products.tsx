@@ -29,6 +29,7 @@ export default function Products() {
     name: '',
     price: 0,
     halfPrice: '' as number | '',
+    pedidosYaPrice: '' as number | '',
     category: 'pizzas' as ProductCategory,
     ingredients: '',
     available: true,
@@ -87,6 +88,7 @@ export default function Products() {
       name: formData.name,
       price: formData.price,
       halfPrice: formData.halfPrice !== '' ? Number(formData.halfPrice) : undefined,
+      pedidosYaPrice: formData.pedidosYaPrice !== '' ? Number(formData.pedidosYaPrice) : undefined,
       category: formData.category,
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
@@ -107,6 +109,7 @@ export default function Products() {
       name: formData.name,
       price: formData.price,
       halfPrice: formData.halfPrice !== '' ? Number(formData.halfPrice) : undefined,
+      pedidosYaPrice: formData.pedidosYaPrice !== '' ? Number(formData.pedidosYaPrice) : undefined,
       category: formData.category,
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
@@ -130,7 +133,7 @@ export default function Products() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', price: 0, halfPrice: '', category: 'pizzas', ingredients: '', available: true, isPizza: false });
+    setFormData({ name: '', price: 0, halfPrice: '', pedidosYaPrice: '', category: 'pizzas', ingredients: '', available: true, isPizza: false });
     setRecipe([]);
     setRecipeItemType('rawMaterial');
     setRecipeMatId('');
@@ -143,6 +146,7 @@ export default function Products() {
       name: product.name,
       price: product.price,
       halfPrice: product.halfPrice ?? '',
+      pedidosYaPrice: product.pedidosYaPrice ?? '',
       category: product.category,
       ingredients: product.ingredients.join(', '),
       available: product.available,
@@ -236,6 +240,12 @@ export default function Products() {
                       )}
                     </div>
                     <p className="text-teal-400 font-bold text-xl">${product.price.toLocaleString()}</p>
+                    {product.pedidosYaPrice != null && (
+                      <p className="text-orange-400 text-sm font-medium flex items-center gap-1">
+                        <span className="bg-orange-500/20 text-orange-400 text-xs px-1.5 py-0.5 rounded font-semibold">PY</span>
+                        ${product.pedidosYaPrice.toLocaleString()}
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => toggleAvailability(product)}
@@ -395,6 +405,24 @@ export default function Products() {
                       min="0"
                     />
                   </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-sm flex items-center gap-2">
+                  <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded font-semibold">PY</span>
+                  Precio PedidosYa <span className="text-gray-600">(opcional)</span>
+                </label>
+                <div className="relative mt-1">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-orange-500/60" />
+                  <input
+                    type="number"
+                    value={formData.pedidosYaPrice}
+                    onChange={e => setFormData({ ...formData, pedidosYaPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                    className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-orange-500 focus:outline-none"
+                    placeholder="—"
+                    min="0"
+                  />
                 </div>
               </div>
 

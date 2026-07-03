@@ -21,6 +21,7 @@ export interface Product {
   name: string;
   price: number;
   halfPrice?: number;
+  pedidosYaPrice?: number;
   category: ProductCategory;
   ingredients: string[];
   image?: string;

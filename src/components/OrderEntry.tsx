@@ -50,6 +50,9 @@ export default function OrderEntry() {
   const [showCashModal, setShowCashModal] = useState(false);
   const [cashInput, setCashInput] = useState<string>('');
 
+  // PedidosYa pricing mode
+  const [isPedidosYa, setIsPedidosYa] = useState(false);
+
   // Portion modal (whole vs half)
   const [showPortionModal, setShowPortionModal] = useState(false);
   const [portionProduct, setPortionProduct] = useState<Product | null>(null);
@@ -90,6 +93,7 @@ export default function OrderEntry() {
     setSelectedCustomerId(customer.id);
     setShowCustomerDropdown(false);
     setCustomerSearchTerm('');
+    setIsPedidosYa(customer.name.toLowerCase().includes('pedidosya'));
   };
 
   const handleCustomerInputChange = (value: string) => {
@@ -169,15 +173,21 @@ export default function OrderEntry() {
     return ['all', ...Array.from(cats)];
   }, [products]);
 
+  // Returns the active price for a product (PedidosYa or regular)
+  const getProductPrice = (product: Product) =>
+    isPedidosYa && product.pedidosYaPrice != null ? product.pedidosYaPrice : product.price;
+
   // Add product to order
   const addProductToOrder = (product: Product) => {
     setPortionProduct(product);
-    const defaultHalf = product.halfPrice !== undefined ? product.halfPrice : Math.round(product.price / 2);
+    const basePrice = getProductPrice(product);
+    const defaultHalf = product.halfPrice !== undefined ? product.halfPrice : Math.round(basePrice / 2);
     setPortionHalfPrice(String(defaultHalf));
     setShowPortionModal(true);
   };
 
   const addWholeProduct = (product: Product) => {
+    const price = getProductPrice(product);
     const existingItem = items.find(i => i.productId === product.id && !i.isHalfHalf && !i.productName.startsWith('½'));
     if (existingItem) {
       setItems(items.map(i =>
@@ -191,8 +201,8 @@ export default function OrderEntry() {
         productId: product.id,
         productName: product.name,
         quantity: 1,
-        unitPrice: product.price,
-        subtotal: product.price,
+        unitPrice: price,
+        subtotal: price,
       }]);
     }
     setShowPortionModal(false);
@@ -213,6 +223,7 @@ export default function OrderEntry() {
   };
 
   const addWholePizza = (product: Product) => {
+    const price = getProductPrice(product);
     const existingItem = items.find(i => i.productId === product.id && !i.isHalfHalf);
     if (existingItem) {
       setItems(items.map(i =>
@@ -226,8 +237,8 @@ export default function OrderEntry() {
         productId: product.id,
         productName: product.name,
         quantity: 1,
-        unitPrice: product.price,
-        subtotal: product.price,
+        unitPrice: price,
+        subtotal: price,
         extras: [],
         removedIngredients: [],
       };
@@ -238,7 +249,7 @@ export default function OrderEntry() {
 
   const addHalfHalfPizza = () => {
     if (halfHalfSelection.first && halfHalfSelection.second) {
-      const avgPrice = (halfHalfSelection.first.price + halfHalfSelection.second.price) / 2;
+      const avgPrice = (getProductPrice(halfHalfSelection.first) + getProductPrice(halfHalfSelection.second)) / 2;
       const newItem: OrderItem = {
         id: `item-${Date.now()}`,
         productId: halfHalfSelection.first.id,
@@ -368,6 +379,7 @@ export default function OrderEntry() {
     setCashAmount(undefined);
     setShowCashModal(false);
     setCashInput('');
+    setIsPedidosYa(false);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
   };
@@ -552,6 +564,7 @@ export default function OrderEntry() {
                       setCustomerName('');
                       setCustomerPhone('');
                       setCustomerAddress('');
+                      setIsPedidosYa(false);
                     }}
                     className="text-gray-400 hover:text-white"
                   >
@@ -559,6 +572,26 @@ export default function OrderEntry() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* PedidosYa pricing toggle */}
+            <div
+              className={`rounded-xl border p-3 flex items-center justify-between cursor-pointer transition-colors ${
+                isPedidosYa
+                  ? 'bg-orange-500/10 border-orange-500/60'
+                  : 'bg-gray-800 border-gray-700 hover:border-gray-600'
+              }`}
+              onClick={() => setIsPedidosYa(v => !v)}
+            >
+              <div className="flex items-center gap-3">
+                <span className={`font-bold text-sm px-2 py-1 rounded ${isPedidosYa ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-400'}`}>PY</span>
+                <span className={`font-medium text-sm ${isPedidosYa ? 'text-orange-400' : 'text-gray-400'}`}>
+                  {isPedidosYa ? 'Precios PedidosYa activos' : 'Activar precios PedidosYa'}
+                </span>
+              </div>
+              <div className={`w-10 h-6 rounded-full transition-colors relative ${isPedidosYa ? 'bg-orange-500' : 'bg-gray-600'}`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isPedidosYa ? 'right-1' : 'left-1'}`} />
+              </div>
             </div>
 
             {/* Order Type & Payment */}
@@ -649,17 +682,30 @@ export default function OrderEntry() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {filteredProducts.map(product => (
-                  <button
-                    key={product.id}
-                    onClick={() => addProductToOrder(product)}
-                    className="bg-gray-750 border border-gray-700 rounded-lg p-3 hover:border-cyan-500 transition-all hover:scale-105"
-                  >
-                    <p className="text-white font-medium text-sm mb-1">{product.name}</p>
-                    <p className="text-cyan-400 font-bold">${product.price.toLocaleString()}</p>
-                    <p className="text-gray-500 text-xs mt-1">{categoryLabels[product.category]}</p>
-                  </button>
-                ))}
+                {filteredProducts.map(product => {
+                  const displayPrice = getProductPrice(product);
+                  const hasPyPrice = product.pedidosYaPrice != null;
+                  return (
+                    <button
+                      key={product.id}
+                      onClick={() => addProductToOrder(product)}
+                      className={`border rounded-lg p-3 transition-all hover:scale-105 text-left ${
+                        isPedidosYa && hasPyPrice
+                          ? 'bg-orange-500/10 border-orange-500/40 hover:border-orange-400'
+                          : 'bg-gray-750 border-gray-700 hover:border-cyan-500'
+                      }`}
+                    >
+                      <p className="text-white font-medium text-sm mb-1">{product.name}</p>
+                      <p className={`font-bold ${isPedidosYa && hasPyPrice ? 'text-orange-400' : 'text-cyan-400'}`}>
+                        ${displayPrice.toLocaleString()}
+                      </p>
+                      {isPedidosYa && hasPyPrice && (
+                        <p className="text-gray-500 text-xs line-through">${product.price.toLocaleString()}</p>
+                      )}
+                      <p className="text-gray-500 text-xs mt-1">{categoryLabels[product.category]}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -773,7 +819,12 @@ export default function OrderEntry() {
                 className="flex flex-col items-center gap-2 p-4 bg-gray-700 hover:bg-cyan-500/20 border border-gray-600 hover:border-cyan-500 rounded-xl transition-colors"
               >
                 <span className="text-white font-semibold text-sm">Entero</span>
-                <span className="text-cyan-400 font-bold text-lg">${portionProduct.price.toLocaleString()}</span>
+                <span className={`font-bold text-lg ${isPedidosYa && portionProduct.pedidosYaPrice != null ? 'text-orange-400' : 'text-cyan-400'}`}>
+                  ${getProductPrice(portionProduct).toLocaleString()}
+                </span>
+                {isPedidosYa && portionProduct.pedidosYaPrice != null && (
+                  <span className="text-gray-500 text-xs line-through">${portionProduct.price.toLocaleString()}</span>
+                )}
               </button>
 
               {/* Medio */}
@@ -877,7 +928,7 @@ export default function OrderEntry() {
             <div className="flex gap-2 mb-4">
               {halfHalfSelection.first && halfHalfSelection.second && (
                 <p className="text-cyan-400 font-medium text-center w-full">
-                  Total: ${((halfHalfSelection.first.price + halfHalfSelection.second.price) / 2).toLocaleString()}
+                  Total: ${((getProductPrice(halfHalfSelection.first) + getProductPrice(halfHalfSelection.second)) / 2).toLocaleString()}
                 </p>
               )}
             </div>
