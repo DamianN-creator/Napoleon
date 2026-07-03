@@ -523,7 +523,7 @@ export default function OrderEntry() {
                 </div>
 
                 <div className="relative">
-                  <label className="block text-gray-400 text-sm mb-1">Direccion {orderType === 'delivery' && '*'}</label>
+                  <label className="block text-gray-400 text-sm mb-1">Direccion</label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                     <input
@@ -532,7 +532,6 @@ export default function OrderEntry() {
                       onChange={e => setCustomerAddress(e.target.value)}
                       className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-cyan-500 focus:outline-none"
                       placeholder="Direccion"
-                      disabled={orderType !== 'delivery'}
                     />
                   </div>
                 </div>
