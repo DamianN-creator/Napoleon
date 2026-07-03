@@ -56,12 +56,12 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-gray-800 border-r border-gray-700 z-50 transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 h-full bg-gray-800 border-r border-gray-700 z-50 transition-transform duration-300 ease-in-out flex flex-col ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0 lg:static lg:h-auto w-64`}
+        } lg:translate-x-0 lg:static lg:h-screen w-64`}
       >
         {/* Header */}
-        <div className="p-4 border-b border-gray-700">
+        <div className="flex-shrink-0 p-4 border-b border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-center w-full">
               <img
@@ -80,8 +80,8 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4">
+        {/* Navigation — scrolleable */}
+        <nav className="flex-1 overflow-y-auto p-4">
           <ul className="space-y-2">
             {menuItems.map(item => (
               <li key={item.id}>
@@ -104,8 +104,8 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
           </ul>
         </nav>
 
-        {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
+        {/* Footer — siempre visible al fondo */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-700">
           <button
             onClick={() => supabase.auth.signOut()}
             className="w-full flex items-center justify-center gap-2 text-gray-400 hover:text-white text-sm py-2 rounded-lg hover:bg-gray-700 transition-colors"
