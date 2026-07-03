@@ -506,28 +506,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Reports
   const generateDailyReport = useCallback((): DailyReport => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayOrders = orders.filter(o => {
-      const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-      return orderDate === today && o.status === 'rendido';
-    });
+    const activeShift = cashShifts.find(s => s.status === 'open');
+    // Use shift open date as the report date so post-midnight orders stay in the same day
+    const reportDate = activeShift
+      ? new Date(activeShift.openedAt).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
 
-    const totalSales = todayOrders.reduce((sum, o) => sum + o.total, 0);
-    const orderCount = todayOrders.length;
+    // All orders in the session belong to the active shift — no calendar date filter needed
+    const shiftOrders = orders.filter(o => o.status === 'rendido');
+    const cancelledOrders = orders.filter(o => o.status === 'cancelado').length;
 
-    const cashSales = todayOrders.filter(o => o.paymentMethod === 'efectivo').reduce((sum, o) => sum + o.total, 0);
-    const cardSales = todayOrders.filter(o => o.paymentMethod === 'tarjeta').reduce((sum, o) => sum + o.total, 0);
-    const transferSales = todayOrders.filter(o => o.paymentMethod === 'transferencia').reduce((sum, o) => sum + o.total, 0);
-    const qrSales = todayOrders.filter(o => o.paymentMethod === 'qr').reduce((sum, o) => sum + o.total, 0);
-
-    const cancelledOrders = orders.filter(o => {
-      const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-      return orderDate === today && o.status === 'cancelado';
-    }).length;
+    const totalSales = shiftOrders.reduce((sum, o) => sum + o.total, 0);
+    const orderCount = shiftOrders.length;
     const averageTicket = orderCount > 0 ? totalSales / orderCount : 0;
 
+    const cashSales = shiftOrders.filter(o => o.paymentMethod === 'efectivo').reduce((sum, o) => sum + o.total, 0);
+    const cardSales = shiftOrders.filter(o => o.paymentMethod === 'tarjeta').reduce((sum, o) => sum + o.total, 0);
+    const transferSales = shiftOrders.filter(o => o.paymentMethod === 'transferencia').reduce((sum, o) => sum + o.total, 0);
+    const qrSales = shiftOrders.filter(o => o.paymentMethod === 'qr').reduce((sum, o) => sum + o.total, 0);
+
     const productSales: Record<string, { productId: string; productName: string; quantity: number; total: number }> = {};
-    todayOrders.forEach(order => {
+    shiftOrders.forEach(order => {
       order.items.forEach(item => {
         if (!productSales[item.productId]) {
           productSales[item.productId] = {
@@ -546,18 +545,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 10);
 
-    const activeShift = cashShifts.find(s => s.status === 'open');
-    const todayShift = activeShift || cashShifts.find(s => {
-      const shiftDate = new Date(s.openedAt).toISOString().split('T')[0];
-      return shiftDate === today;
-    });
-    const openingAmount = todayShift?.openingAmount || 0;
-    const totalExpenses = todayShift?.movements.filter(m => m.type === 'gasto').reduce((sum, m) => sum + m.amount, 0) || 0;
-    const totalExtraIncome = todayShift?.movements.filter(m => m.type === 'ingreso').reduce((sum, m) => sum + m.amount, 0) || 0;
+    const openingAmount = activeShift?.openingAmount || 0;
+    const totalExpenses = activeShift?.movements.filter(m => m.type === 'gasto').reduce((sum, m) => sum + m.amount, 0) || 0;
+    const totalExtraIncome = activeShift?.movements.filter(m => m.type === 'ingreso').reduce((sum, m) => sum + m.amount, 0) || 0;
 
     const report: DailyReport = {
-      id: `report-${today}`,
-      date: today,
+      id: `report-${reportDate}`,
+      date: reportDate,
       totalSales,
       orderCount,
       cashSales,
@@ -571,11 +565,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openingAmount,
       totalExpenses,
       totalExtraIncome,
-      arqueo: todayShift?.arqueo,
+      arqueo: activeShift?.arqueo,
     };
 
     setDailyReports(prev => {
-      const existingIndex = prev.findIndex(r => r.date === today);
+      const existingIndex = prev.findIndex(r => r.date === reportDate);
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex] = report;
@@ -585,7 +579,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     return report;
-  }, [orders, setDailyReports]);
+  }, [orders, cashShifts, setDailyReports]);
 
   const getDailyReport = useCallback((date: string): DailyReport | undefined => {
     return dailyReports.find(r => r.date === date);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Order, CompletedOrder } from '../types';
 import { orderStatusColors, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
@@ -20,7 +20,7 @@ import {
 type HistoryOrder = Order | CompletedOrder;
 
 export default function SalesHistory() {
-  const { orders, completedOrders } = useApp();
+  const { orders, completedOrders, cashShifts } = useApp();
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -29,6 +29,30 @@ export default function SalesHistory() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showOrderDetail, setShowOrderDetail] = useState<HistoryOrder | null>(null);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
+  // Map shiftId -> shift open date for O(1) lookups
+  const shiftDateMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    cashShifts.forEach(s => {
+      map[s.id] = new Date(s.openedAt).toISOString().split('T')[0];
+    });
+    return map;
+  }, [cashShifts]);
+
+  // Date of the currently active shift (orders after midnight belong to this date)
+  const activeShiftDate = useMemo(() => {
+    const active = cashShifts.find(s => s.status === 'open');
+    return active ? new Date(active.openedAt).toISOString().split('T')[0] : null;
+  }, [cashShifts]);
+
+  // Returns the shift date for an order (not the calendar date of createdAt)
+  const getOrderShiftDate = useCallback((order: HistoryOrder): string => {
+    if ('shiftId' in order && order.shiftId) {
+      return shiftDateMap[order.shiftId] || new Date(order.createdAt).toISOString().split('T')[0];
+    }
+    // Active session orders belong to the current shift
+    return activeShiftDate || new Date(order.createdAt).toISOString().split('T')[0];
+  }, [shiftDateMap, activeShiftDate]);
 
   // Combine current session orders (rendido/cancelado) with completedOrders history
   const allHistoricalOrders = useMemo(() => {
@@ -44,18 +68,12 @@ export default function SalesHistory() {
   const filteredOrders = useMemo(() => {
     let result = allHistoricalOrders;
 
-    // Date filters
+    // Date filters — compare against shift open date, not order creation date
     if (dateFrom) {
-      result = result.filter(o => {
-        const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-        return orderDate >= dateFrom;
-      });
+      result = result.filter(o => getOrderShiftDate(o) >= dateFrom);
     }
     if (dateTo) {
-      result = result.filter(o => {
-        const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-        return orderDate <= dateTo;
-      });
+      result = result.filter(o => getOrderShiftDate(o) <= dateTo);
     }
 
     // Status filter
@@ -82,18 +100,18 @@ export default function SalesHistory() {
     return result;
   }, [allHistoricalOrders, dateFrom, dateTo, filterStatus, filterPayment, sortBy, sortOrder]);
 
-  // Group orders by date
+  // Group orders by shift open date (not calendar date of createdAt)
   const groupedOrders = useMemo(() => {
     const groups: Record<string, HistoryOrder[]> = {};
     filteredOrders.forEach(order => {
-      const date = new Date(order.createdAt).toISOString().split('T')[0];
+      const date = getOrderShiftDate(order);
       if (!groups[date]) {
         groups[date] = [];
       }
       groups[date].push(order);
     });
     return groups;
-  }, [filteredOrders]);
+  }, [filteredOrders, getOrderShiftDate]);
 
   const stats = useMemo(() => {
     const delivered = filteredOrders.filter(o => o.status === 'rendido');
