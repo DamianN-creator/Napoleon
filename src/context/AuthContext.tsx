@@ -2,9 +2,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+const SUPERADMIN_EMAIL = import.meta.env.VITE_SUPERADMIN_EMAIL as string | undefined;
+
 interface AuthContextType {
   session: Session | null;
   loading: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,7 +29,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  return <AuthContext.Provider value={{ session, loading }}>{children}</AuthContext.Provider>;
+  const isSuperAdmin = Boolean(
+    SUPERADMIN_EMAIL && session?.user?.email === SUPERADMIN_EMAIL
+  );
+
+  return <AuthContext.Provider value={{ session, loading, isSuperAdmin }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

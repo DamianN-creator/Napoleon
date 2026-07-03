@@ -21,6 +21,7 @@ import { Menu, DollarSign, Lock, Clock, RefreshCw } from 'lucide-react';
 
 function AppContent() {
   const { getActiveCashShift, openCashShift, cashShifts, isLoading } = useApp();
+  const { isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openingAmount, setOpeningAmount] = useState('');
@@ -28,8 +29,8 @@ function AppContent() {
 
   const activeShift = getActiveCashShift();
 
-  // Show cash opening screen when no active shift
-  if (!activeShift && !isLoading) {
+  // Show cash opening screen when no active shift (superadmin bypasses this)
+  if (!activeShift && !isLoading && !isSuperAdmin) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
