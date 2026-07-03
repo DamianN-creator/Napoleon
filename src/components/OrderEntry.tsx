@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function OrderEntry() {
-  const { products, extras, addOrder, customers, findCustomerByPhone, addCustomer, updateCustomerStats } = useApp();
+  const { products, extras, addOrder, customers, findCustomerByPhone, addCustomer, updateCustomerStats, updateProduct } = useApp();
 
   // Order state
   const [customerName, setCustomerName] = useState('');
@@ -52,6 +52,13 @@ export default function OrderEntry() {
 
   // PedidosYa pricing mode
   const [isPedidosYa, setIsPedidosYa] = useState(false);
+
+  // Modal para cargar precio PedidosYa faltante
+  const [pyPriceModal, setPyPriceModal] = useState<{
+    product: Product;
+    pendingAction: 'whole' | 'pizza';
+  } | null>(null);
+  const [pyPriceInput, setPyPriceInput] = useState('');
 
   // Portion modal (whole vs half)
   const [showPortionModal, setShowPortionModal] = useState(false);
@@ -173,21 +180,85 @@ export default function OrderEntry() {
     return ['all', ...Array.from(cats)];
   }, [products]);
 
-  // Returns the active price for a product (PedidosYa or regular)
-  const getProductPrice = (product: Product) =>
-    isPedidosYa && product.pedidosYaPrice != null ? product.pedidosYaPrice : product.price;
+  // En modo PY devuelve el precio PY si existe, null si falta, o el precio regular fuera de PY
+  const getProductPrice = (product: Product): number | null => {
+    if (!isPedidosYa) return product.price;
+    return product.pedidosYaPrice ?? null;
+  };
+
+  // Confirma el precio PY ingresado: actualiza el producto y agrega al pedido
+  const confirmPyPrice = () => {
+    const price = Number(pyPriceInput);
+    if (!pyPriceModal || !pyPriceInput || price <= 0) return;
+    const { product, pendingAction } = pyPriceModal;
+
+    // Persiste el precio en el producto
+    updateProduct({ ...product, pedidosYaPrice: price });
+
+    // Agrega al pedido con el precio recién cargado
+    if (pendingAction === 'pizza') {
+      const existing = items.find(i => i.productId === product.id && !i.isHalfHalf);
+      if (existing) {
+        setItems(items.map(i =>
+          i.id === existing.id
+            ? { ...i, quantity: i.quantity + 1, subtotal: (i.quantity + 1) * i.unitPrice }
+            : i
+        ));
+      } else {
+        setItems(prev => [...prev, {
+          id: `item-${Date.now()}`,
+          productId: product.id,
+          productName: product.name,
+          quantity: 1,
+          unitPrice: price,
+          subtotal: price,
+          extras: [],
+          removedIngredients: [],
+        }]);
+        setShowHalfHalfModal(false);
+      }
+    } else {
+      const existing = items.find(i => i.productId === product.id && !i.isHalfHalf && !i.productName.startsWith('½'));
+      if (existing) {
+        setItems(items.map(i =>
+          i.id === existing.id
+            ? { ...i, quantity: i.quantity + 1, subtotal: (i.quantity + 1) * i.unitPrice }
+            : i
+        ));
+      } else {
+        setItems(prev => [...prev, {
+          id: `item-${Date.now()}`,
+          productId: product.id,
+          productName: product.name,
+          quantity: 1,
+          unitPrice: price,
+          subtotal: price,
+        }]);
+      }
+      setShowPortionModal(false);
+      setPortionProduct(null);
+    }
+
+    setPyPriceModal(null);
+    setPyPriceInput('');
+  };
 
   // Add product to order
   const addProductToOrder = (product: Product) => {
+    if (isPedidosYa && product.pedidosYaPrice == null) {
+      setPyPriceModal({ product, pendingAction: 'whole' });
+      setPyPriceInput('');
+      return;
+    }
     setPortionProduct(product);
-    const basePrice = getProductPrice(product);
+    const basePrice = (getProductPrice(product) as number);
     const defaultHalf = product.halfPrice !== undefined ? product.halfPrice : Math.round(basePrice / 2);
     setPortionHalfPrice(String(defaultHalf));
     setShowPortionModal(true);
   };
 
   const addWholeProduct = (product: Product) => {
-    const price = getProductPrice(product);
+    const price = getProductPrice(product) as number;
     const existingItem = items.find(i => i.productId === product.id && !i.isHalfHalf && !i.productName.startsWith('½'));
     if (existingItem) {
       setItems(items.map(i =>
@@ -223,7 +294,12 @@ export default function OrderEntry() {
   };
 
   const addWholePizza = (product: Product) => {
-    const price = getProductPrice(product);
+    if (isPedidosYa && product.pedidosYaPrice == null) {
+      setPyPriceModal({ product, pendingAction: 'pizza' });
+      setPyPriceInput('');
+      return;
+    }
+    const price = getProductPrice(product) as number;
     const existingItem = items.find(i => i.productId === product.id && !i.isHalfHalf);
     if (existingItem) {
       setItems(items.map(i =>
@@ -249,7 +325,9 @@ export default function OrderEntry() {
 
   const addHalfHalfPizza = () => {
     if (halfHalfSelection.first && halfHalfSelection.second) {
-      const avgPrice = (getProductPrice(halfHalfSelection.first) + getProductPrice(halfHalfSelection.second)) / 2;
+      const p1 = getProductPrice(halfHalfSelection.first) ?? halfHalfSelection.first.price;
+      const p2 = getProductPrice(halfHalfSelection.second) ?? halfHalfSelection.second.price;
+      const avgPrice = (p1 + p2) / 2;
       const newItem: OrderItem = {
         id: `item-${Date.now()}`,
         productId: halfHalfSelection.first.id,
@@ -696,7 +774,7 @@ export default function OrderEntry() {
                     >
                       <p className="text-white font-medium text-sm mb-1">{product.name}</p>
                       <p className={`font-bold ${isPedidosYa && hasPyPrice ? 'text-orange-400' : 'text-cyan-400'}`}>
-                        ${displayPrice.toLocaleString()}
+                        ${(displayPrice ?? product.price).toLocaleString()}
                       </p>
                       {isPedidosYa && hasPyPrice && (
                         <p className="text-gray-500 text-xs line-through">${product.price.toLocaleString()}</p>
@@ -819,7 +897,7 @@ export default function OrderEntry() {
               >
                 <span className="text-white font-semibold text-sm">Entero</span>
                 <span className={`font-bold text-lg ${isPedidosYa && portionProduct.pedidosYaPrice != null ? 'text-orange-400' : 'text-cyan-400'}`}>
-                  ${getProductPrice(portionProduct).toLocaleString()}
+                  ${(getProductPrice(portionProduct) ?? portionProduct.price).toLocaleString()}
                 </span>
                 {isPedidosYa && portionProduct.pedidosYaPrice != null && (
                   <span className="text-gray-500 text-xs line-through">${portionProduct.price.toLocaleString()}</span>
@@ -927,7 +1005,7 @@ export default function OrderEntry() {
             <div className="flex gap-2 mb-4">
               {halfHalfSelection.first && halfHalfSelection.second && (
                 <p className="text-cyan-400 font-medium text-center w-full">
-                  Total: ${((getProductPrice(halfHalfSelection.first) + getProductPrice(halfHalfSelection.second)) / 2).toLocaleString()}
+                  Total: ${(((getProductPrice(halfHalfSelection.first) ?? halfHalfSelection.first.price) + (getProductPrice(halfHalfSelection.second) ?? halfHalfSelection.second.price)) / 2).toLocaleString()}
                 </p>
               )}
             </div>
@@ -1136,6 +1214,68 @@ export default function OrderEntry() {
               >
                 <Send className="w-5 h-5" />
                 Confirmar y Cargar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: precio PedidosYa faltante */}
+      {pyPriceModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-orange-500 p-6 max-w-sm w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded font-bold">PY</span>
+                Precio PedidosYa faltante
+              </h3>
+              <button
+                onClick={() => { setPyPriceModal(null); setPyPriceInput(''); }}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <p className="text-gray-300 mb-1">
+              <span className="font-semibold text-white">{pyPriceModal.product.name}</span> no tiene precio PedidosYa cargado.
+            </p>
+            <p className="text-gray-400 text-sm mb-5">
+              Ingresá el precio y se guardará automáticamente en la lista de productos.
+            </p>
+
+            <div className="relative mb-5">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-orange-400" />
+              <input
+                type="number"
+                autoFocus
+                value={pyPriceInput}
+                onChange={e => setPyPriceInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && confirmPyPrice()}
+                className="w-full bg-gray-700 text-white text-2xl font-bold pl-10 pr-4 py-3 rounded-lg border border-orange-500 focus:outline-none text-center"
+                placeholder="0"
+                min="1"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setPyPriceModal(null); setPyPriceInput(''); }}
+                className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmPyPrice}
+                disabled={!pyPriceInput || Number(pyPriceInput) <= 0}
+                className={`flex-1 py-3 rounded-lg transition-colors font-bold flex items-center justify-center gap-2 ${
+                  pyPriceInput && Number(pyPriceInput) > 0
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                <Check className="w-5 h-5" />
+                Guardar y agregar
               </button>
             </div>
           </div>
