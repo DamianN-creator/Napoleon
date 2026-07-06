@@ -168,6 +168,11 @@ export default function ActiveOrders() {
                     <span className="bg-gray-700 px-2 py-0.5 rounded text-xs">
                       {orderTypeLabels[order.orderType]}
                     </span>
+                    {order.channel === 'online' && (
+                      <span className="bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded text-xs">
+                        Web
+                      </span>
+                    )}
                     {order.orderType === 'mesa' && (
                       <span>Mesa {order.tableNumber}</span>
                     )}

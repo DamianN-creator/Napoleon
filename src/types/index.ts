@@ -25,6 +25,8 @@ export interface Product {
   category: ProductCategory;
   ingredients: string[];
   image?: string;
+  description?: string;
+  publishedOnline?: boolean;
   available: boolean;
   isPizza: boolean;
   recipe?: RecipeItem[];
@@ -67,6 +69,7 @@ export interface Order {
   customerAddress?: string;
   notes?: string;
   orderType: OrderType;
+  channel?: 'online';
   tableNumber?: number;
   items: OrderItem[];
   total: number;

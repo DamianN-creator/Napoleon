@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS products (
 
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage products" ON products;
 CREATE POLICY "Authenticated users can manage products"
   ON products FOR ALL
   TO authenticated
@@ -65,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage orders" ON orders;
 CREATE POLICY "Authenticated users can manage orders"
   ON orders FOR ALL
   TO authenticated
@@ -80,6 +82,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage customers" ON customers;
 CREATE POLICY "Authenticated users can manage customers"
   ON customers FOR ALL
   TO authenticated
@@ -95,6 +98,7 @@ CREATE TABLE IF NOT EXISTS cadetes (
 
 ALTER TABLE cadetes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage cadetes" ON cadetes;
 CREATE POLICY "Authenticated users can manage cadetes"
   ON cadetes FOR ALL
   TO authenticated
@@ -110,6 +114,7 @@ CREATE TABLE IF NOT EXISTS daily_reports (
 
 ALTER TABLE daily_reports ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage daily reports" ON daily_reports;
 CREATE POLICY "Authenticated users can manage daily reports"
   ON daily_reports FOR ALL
   TO authenticated
@@ -125,6 +130,7 @@ CREATE TABLE IF NOT EXISTS cash_shifts (
 
 ALTER TABLE cash_shifts ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage cash shifts" ON cash_shifts;
 CREATE POLICY "Authenticated users can manage cash shifts"
   ON cash_shifts FOR ALL
   TO authenticated
@@ -140,6 +146,7 @@ CREATE TABLE IF NOT EXISTS completed_orders (
 
 ALTER TABLE completed_orders ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage completed orders" ON completed_orders;
 CREATE POLICY "Authenticated users can manage completed orders"
   ON completed_orders FOR ALL
   TO authenticated
@@ -155,6 +162,7 @@ CREATE TABLE IF NOT EXISTS raw_materials (
 
 ALTER TABLE raw_materials ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage raw materials" ON raw_materials;
 CREATE POLICY "Authenticated users can manage raw materials"
   ON raw_materials FOR ALL
   TO authenticated
@@ -170,6 +178,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
 
 ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage stock movements" ON stock_movements;
 CREATE POLICY "Authenticated users can manage stock movements"
   ON stock_movements FOR ALL
   TO authenticated
@@ -185,6 +194,7 @@ CREATE TABLE IF NOT EXISTS sub_products (
 
 ALTER TABLE sub_products ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage sub products" ON sub_products;
 CREATE POLICY "Authenticated users can manage sub products"
   ON sub_products FOR ALL
   TO authenticated
@@ -200,6 +210,7 @@ CREATE TABLE IF NOT EXISTS extras (
 
 ALTER TABLE extras ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage extras" ON extras;
 CREATE POLICY "Authenticated users can manage extras"
   ON extras FOR ALL
   TO authenticated
@@ -215,6 +226,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can manage app settings" ON app_settings;
 CREATE POLICY "Authenticated users can manage app settings"
   ON app_settings FOR ALL
   TO authenticated

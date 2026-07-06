@@ -74,6 +74,11 @@ function OrderCard({ order, estimatedTime, onEstimatedTimeChange, onStartProduct
           <span className="bg-white/20 px-2 py-1 rounded text-xs text-white font-medium">
             {orderTypeLabels[order.orderType]}
           </span>
+          {order.channel === 'online' && (
+            <span className="bg-cyan-500/30 px-2 py-1 rounded text-xs text-white font-medium">
+              Web
+            </span>
+          )}
         </div>
         <div className="text-right">
           <div className="text-white font-medium">{formatTime(order.createdAt)}</div>

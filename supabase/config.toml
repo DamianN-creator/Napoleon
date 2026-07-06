@@ -1,0 +1,7 @@
+project_id = "kumjakbtxykqhyoosrpa"
+
+[functions.whatsapp-agent]
+verify_jwt = false
+
+[functions.create-online-order]
+verify_jwt = false

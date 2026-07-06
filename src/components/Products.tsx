@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
 import { Product, ProductCategory, RecipeItem } from '../types';
 import { categoryLabels } from '../data/initialData';
 import {
@@ -15,6 +16,9 @@ import {
   DollarSign,
   Boxes,
   FlaskConical,
+  Image as ImageIcon,
+  Globe,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function Products() {
@@ -34,7 +38,12 @@ export default function Products() {
     ingredients: '',
     available: true,
     isPizza: false,
+    image: '' as string | undefined,
+    description: '',
+    publishedOnline: false,
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
 
   // Recipe state
   const [recipe, setRecipe] = useState<RecipeItem[]>([]);
@@ -94,6 +103,9 @@ export default function Products() {
       available: formData.available,
       isPizza: formData.isPizza || formData.category === 'pizzas',
       recipe: recipe.length > 0 ? recipe : undefined,
+      image: formData.image || undefined,
+      description: formData.description.trim() || undefined,
+      publishedOnline: formData.publishedOnline,
     };
 
     addProduct(newProduct);
@@ -115,6 +127,9 @@ export default function Products() {
       available: formData.available,
       isPizza: formData.isPizza || formData.category === 'pizzas',
       recipe: recipe.length > 0 ? recipe : undefined,
+      image: formData.image || undefined,
+      description: formData.description.trim() || undefined,
+      publishedOnline: formData.publishedOnline,
     };
 
     updateProduct(updatedProduct);
@@ -133,11 +148,16 @@ export default function Products() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', price: 0, halfPrice: '', pedidosYaPrice: '', category: 'pizzas', ingredients: '', available: true, isPizza: false });
+    setFormData({
+      name: '', price: 0, halfPrice: '', pedidosYaPrice: '', category: 'pizzas',
+      ingredients: '', available: true, isPizza: false,
+      image: '', description: '', publishedOnline: false,
+    });
     setRecipe([]);
     setRecipeItemType('rawMaterial');
     setRecipeMatId('');
     setRecipeQty('');
+    setImageUploadError(null);
   };
 
   const startEdit = (product: Product) => {
@@ -151,10 +171,29 @@ export default function Products() {
       ingredients: product.ingredients.join(', '),
       available: product.available,
       isPizza: product.isPizza,
+      image: product.image ?? '',
+      description: product.description ?? '',
+      publishedOnline: product.publishedOnline ?? false,
     });
     setRecipe(product.recipe || []);
     setRecipeMatId('');
     setRecipeQty('');
+    setImageUploadError(null);
+  };
+
+  const handleImageUpload = async (file: File) => {
+    setImageUploadError(null);
+    setUploadingImage(true);
+    const path = `${editingProduct?.id || 'new-' + Date.now()}-${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true });
+    if (error) {
+      setImageUploadError('No se pudo subir la imagen. Intenta de nuevo.');
+      setUploadingImage(false);
+      return;
+    }
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    setFormData(prev => ({ ...prev, image: data.publicUrl }));
+    setUploadingImage(false);
   };
 
   const categoryStats = useMemo(() => {
@@ -237,6 +276,11 @@ export default function Products() {
                       <p className="text-white font-medium text-lg">{product.name}</p>
                       {product.isPizza && (
                         <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded">Pizza</span>
+                      )}
+                      {product.publishedOnline && (
+                        <span className="bg-cyan-500/20 text-cyan-400 text-xs px-2 py-0.5 rounded flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> Online
+                        </span>
                       )}
                     </div>
                     <p className="text-teal-400 font-bold text-xl">${product.price.toLocaleString()}</p>
@@ -346,10 +390,10 @@ export default function Products() {
           }}
         >
           <div
-            className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full"
+            className="bg-gray-800 rounded-xl border border-gray-700 max-w-md w-full max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-700 shrink-0">
               <h2 className="text-xl font-bold text-white">
                 {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
               </h2>
@@ -365,7 +409,7 @@ export default function Products() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 p-6 overflow-y-auto">
               <div>
                 <label className="text-gray-400 text-sm">Nombre *</label>
                 <input
@@ -476,6 +520,77 @@ export default function Products() {
                 </label>
               </div>
 
+              {/* Online store fields */}
+              <div className="border-t border-gray-700 pt-4 space-y-4">
+                <label className="text-gray-400 text-sm flex items-center gap-1">
+                  <Globe className="w-4 h-4" />
+                  Tienda Online
+                </label>
+
+                <div>
+                  <label className="text-gray-400 text-sm">Foto</label>
+                  <div className="flex items-center gap-3 mt-1">
+                    {formData.image ? (
+                      <img src={formData.image} alt="" className="w-16 h-16 rounded-lg object-cover border border-gray-600" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg bg-gray-700 border border-gray-600 flex items-center justify-center">
+                        <ImageIcon className="w-6 h-6 text-gray-500" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingImage}
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImageUpload(file);
+                        }}
+                        className="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-teal-500 file:text-white file:cursor-pointer hover:file:bg-teal-600"
+                      />
+                      {uploadingImage && (
+                        <p className="text-teal-400 text-xs mt-1 flex items-center gap-1">
+                          <RefreshCw className="w-3 h-3 animate-spin" /> Subiendo...
+                        </p>
+                      )}
+                      {imageUploadError && (
+                        <p className="text-red-400 text-xs mt-1">{imageUploadError}</p>
+                      )}
+                      {formData.image && !uploadingImage && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, image: '' })}
+                          className="text-gray-500 hover:text-red-400 text-xs mt-1"
+                        >
+                          Quitar foto
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-gray-400 text-sm">Descripcion para la tienda online</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-teal-500 focus:outline-none mt-1"
+                    placeholder="Descripcion breve para mostrarle al cliente"
+                    rows={2}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.publishedOnline}
+                    onChange={e => setFormData({ ...formData, publishedOnline: e.target.checked })}
+                    className="w-5 h-5 rounded text-teal-500"
+                  />
+                  <span className="text-white">Publicar en Tienda Online</span>
+                </label>
+              </div>
+
               {/* Recipe */}
               {(rawMaterials.length > 0 || subProducts.length > 0) && (
                 <div className="border-t border-gray-700 pt-4">
@@ -573,7 +688,7 @@ export default function Products() {
               )}
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 p-6 pt-4 border-t border-gray-700 shrink-0">
               <button
                 onClick={() => {
                   setShowAddModal(false);

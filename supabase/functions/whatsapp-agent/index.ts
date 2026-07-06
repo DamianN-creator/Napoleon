@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 interface ConversationContext {
-  stage: 'greeting' | 'ordering' | 'confirming_address' | 'confirming_order' | 'selecting_payment' | 'finished';
+  stage: 'greeting' | 'ordering' | 'confirming_name' | 'confirming_address' | 'selecting_payment' | 'finished';
   cart: Array<{
     productId: string;
     productName: string;
@@ -25,48 +25,81 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-const PRODUCT_CATALOG = {
-  pizzas: [
-    { id: 'pizza-1', name: 'Pizza Margarita', price: 1200, keywords: ['margarita', 'muzza', 'mozzarella', 'simple'] },
-    { id: 'pizza-2', name: 'Pizza Napolitana', price: 1400, keywords: ['napolitana', 'napoli'] },
-    { id: 'pizza-3', name: 'Pizza Fugazzeta', price: 1500, keywords: ['fugazzeta', 'fugazza', 'cebolla'] },
-    { id: 'pizza-4', name: 'Pizza Especial', price: 1800, keywords: ['especial', 'completa', 'jamon'] },
-    { id: 'pizza-5', name: 'Pizza Calabresa', price: 1700, keywords: ['calabresa', 'calabres'] },
-    { id: 'pizza-6', name: 'Pizza Provolone', price: 1600, keywords: ['provolone'] },
-    { id: 'pizza-7', name: 'Pizza Roquefort', price: 1900, keywords: ['roquefort', 'azul'] },
-    { id: 'pizza-8', name: 'Pizza Palmitos', price: 2000, keywords: ['palmitos', 'palmito'] },
-  ],
-  empanadas: [
-    { id: 'emp-1', name: 'Empanada Carne', price: 250, keywords: ['carne', 'vaca'] },
-    { id: 'emp-2', name: 'Empanada Pollo', price: 250, keywords: ['pollo'] },
-    { id: 'emp-3', name: 'Empanada Humita', price: 250, keywords: ['humita', 'choclo'] },
-    { id: 'emp-4', name: 'Empanada Queso', price: 250, keywords: ['queso'] },
-    { id: 'emp-5', name: 'Empanada Jamon y Queso', price: 280, keywords: ['jamon y queso', 'jyq'] },
-    { id: 'emp-6', name: 'Empanada Caprese', price: 280, keywords: ['caprese'] },
-  ],
-  bebidas: [
-    { id: 'beb-1', name: 'Coca Cola 500ml', price: 300, keywords: ['coca', 'cocacola'] },
-    { id: 'beb-2', name: 'Coca Cola 1.5L', price: 500, keywords: ['coca grande'] },
-    { id: 'beb-3', name: 'Pepsi 500ml', price: 300, keywords: ['pepsi'] },
-    { id: 'beb-4', name: 'Sprite 500ml', price: 300, keywords: ['sprite'] },
-    { id: 'beb-5', name: 'Fanta 500ml', price: 300, keywords: ['fanta'] },
-    { id: 'beb-6', name: 'Agua Mineral', price: 200, keywords: ['agua'] },
-    { id: 'beb-7', name: 'Cerveza Quilmes 1L', price: 600, keywords: ['quilmes', 'cerveza'] },
-    { id: 'beb-8', name: 'Cerveza Stella 1L', price: 650, keywords: ['stella'] },
-  ],
-  postres: [
-    { id: 'post-1', name: 'Flan con Dulce', price: 350, keywords: ['flan'] },
-    { id: 'post-2', name: 'Helado 2 bochas', price: 400, keywords: ['helado'] },
-    { id: 'post-3', name: 'Brownie con Helado', price: 550, keywords: ['brownie'] },
-    { id: 'post-4', name: 'Tiramisu', price: 450, keywords: ['tiramisu'] },
-  ],
-  promociones: [
-    { id: 'promo-1', name: 'PROMO 2 Pizzas Grandes', price: 3000, keywords: ['promo pizza', '2 pizzas'] },
-    { id: 'promo-2', name: 'PROMO Pizza + Bebida', price: 1800, keywords: ['pizza bebida'] },
-    { id: 'promo-3', name: 'PROMO Empanadas x12', price: 2500, keywords: ['promo empanada', '12 empanadas'] },
-    { id: 'promo-4', name: 'PROMO Pizza + Empanadas', price: 2200, keywords: ['pizza empanada'] },
-  ],
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  available: boolean;
+}
+
+const CATEGORY_ORDER = ['pizzas', 'empanadas', 'bebidas', 'postres', 'promociones'];
+const CATEGORY_LABELS: Record<string, string> = {
+  pizzas: 'PIZZAS',
+  empanadas: 'EMPANADAS',
+  bebidas: 'BEBIDAS',
+  postres: 'POSTRES',
+  promociones: 'PROMOCIONES',
 };
+const NAME_STOPWORDS = new Set(['pizza', 'pizzas', 'empanada', 'empanadas', 'de', 'con', 'y', 'promo']);
+
+async function fetchAvailableProducts(): Promise<Product[]> {
+  const { data, error } = await supabase.from('products').select('id, data');
+  if (error || !data) return [];
+  return data
+    .map(row => row.data as Product)
+    .filter(p => p && p.available !== false && typeof p.price === 'number');
+}
+
+function getOrderedProducts(products: Product[]): Product[] {
+  const categoryRank = (category: string) => {
+    const idx = CATEGORY_ORDER.indexOf(category);
+    return idx === -1 ? CATEGORY_ORDER.length : idx;
+  };
+  return [...products].sort((a, b) => {
+    const rankDiff = categoryRank(a.category) - categoryRank(b.category);
+    return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
+  });
+}
+
+function buildMenuText(products: Product[]): string {
+  const ordered = getOrderedProducts(products);
+  if (ordered.length === 0) {
+    return 'No hay productos cargados todavia. Consulta con el local.';
+  }
+
+  let text = 'MENU NAPOLEON PIZZERIA:\n';
+  let lastCategory = '';
+  ordered.forEach((product, index) => {
+    if (product.category !== lastCategory) {
+      text += `\n${CATEGORY_LABELS[product.category] || product.category.toUpperCase()}:\n`;
+      lastCategory = product.category;
+    }
+    text += `${index + 1}. ${product.name} - $${product.price.toLocaleString()}\n`;
+  });
+  text += `\nPara pedir escribime el numero y la cantidad. Ejemplos:\n"3" = 1 unidad del producto 3\n"3x2" = 2 unidades del producto 3\n"3x2, 7x1" = varios productos juntos\n\nTambien podes escribir el nombre del producto directamente.`;
+  return text;
+}
+
+function parseNumberedSelections(
+  text: string,
+  orderedProducts: Product[]
+): Array<{ product: Product; quantity: number }> | null {
+  const tokens = text.split(',').map(t => t.trim()).filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  const results: Array<{ product: Product; quantity: number }> = [];
+  for (const token of tokens) {
+    const match = token.match(/^(\d+)\s*x\s*(\d+)$/i) || token.match(/^(\d+)$/);
+    if (!match) return null;
+    const index = parseInt(match[1], 10);
+    const quantity = match[2] ? parseInt(match[2], 10) : 1;
+    const product = orderedProducts[index - 1];
+    if (!product || quantity <= 0) return null;
+    results.push({ product, quantity });
+  }
+  return results;
+}
 
 async function getOrCreateConversation(phoneNumber: string): Promise<{ id: string; context: ConversationContext; customerName?: string; customerAddress?: string }> {
   const normalizedPhone = phoneNumber.replace(/\D/g, '').slice(-10);
@@ -129,16 +162,76 @@ async function updateConversationContext(
   await supabase.from('whatsapp_conversations').update(updateData).eq('id', conversationId);
 }
 
-function findProductByText(text: string) {
+async function getNextOrderNumber(): Promise<number> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'currentOrderNumber')
+    .maybeSingle();
+
+  const current = typeof data?.value === 'number' ? data.value : 1;
+
+  await supabase.from('app_settings').upsert({
+    key: 'currentOrderNumber',
+    value: current + 1,
+    updated_at: new Date().toISOString(),
+  });
+
+  return current;
+}
+
+async function createPendingOrder(
+  phoneNumber: string,
+  context: ConversationContext,
+  customerName: string | undefined,
+  customerAddress: string | undefined
+): Promise<void> {
+  const orderNumber = await getNextOrderNumber();
+  const now = new Date().toISOString();
+  const orderId = `order-whatsapp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  const order = {
+    id: orderId,
+    orderNumber,
+    createdAt: now,
+    updatedAt: now,
+    customerName: customerName || `Cliente WhatsApp ${phoneNumber}`,
+    customerPhone: phoneNumber,
+    customerAddress,
+    orderType: 'delivery',
+    items: context.cart.map((item, index) => ({
+      id: `item-${Date.now()}-${index}`,
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.price,
+      subtotal: item.price * item.quantity,
+      extras: [],
+      removedIngredients: [],
+    })),
+    total: calculateTotal(context.cart),
+    paymentMethod: context.paymentMethod,
+    status: 'pendiente',
+  };
+
+  const { error } = await supabase.from('orders').insert({ id: orderId, data: order, updated_at: now });
+  if (error) console.error('Error creating order from WhatsApp:', error);
+}
+
+function findProductByText(text: string, products: Product[]): Product | null {
   const normalizedText = text.toLowerCase().trim();
-  for (const [category, products] of Object.entries(PRODUCT_CATALOG)) {
-    for (const product of products) {
-      if (normalizedText.includes(product.name.toLowerCase())) return { ...product, category };
-      for (const keyword of product.keywords) {
-        if (normalizedText.includes(keyword)) return { ...product, category };
-      }
-    }
+  if (!normalizedText) return null;
+
+  for (const product of products) {
+    const nameLower = product.name.toLowerCase();
+    if (normalizedText.includes(nameLower) || nameLower.includes(normalizedText)) return product;
   }
+
+  for (const product of products) {
+    const words = product.name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !NAME_STOPWORDS.has(w));
+    if (words.some(w => normalizedText.includes(w))) return product;
+  }
+
   return null;
 }
 
@@ -166,58 +259,55 @@ function calculateTotal(cart: ConversationContext['cart']): number {
 async function generateResponse(
   userMessage: string,
   context: ConversationContext,
-  customerName?: string,
-  customerAddress?: string
+  customerName: string | undefined,
+  customerAddress: string | undefined,
+  products: Product[]
 ): Promise<{ response: string; newContext: ConversationContext; customerName?: string; customerAddress?: string }> {
   const msg = userMessage.toLowerCase().trim();
   let newContext = { ...context };
   let newCustomerName = customerName;
   let newCustomerAddress = customerAddress;
 
+  const orderedProducts = getOrderedProducts(products);
+
   if (context.stage === 'greeting') {
-    if (msg.includes('hola') || msg.includes('buenas') || msg.includes('hi') || msg.includes('pedido')) {
-      if (customerName && customerAddress) {
-        newContext.stage = 'ordering';
-        return {
-          response: `Hola ${customerName}! Bienvenido de nuevo a Napoleon Pizzeria! Tenemos tu direccion guardada: ${customerAddress}.\n\nQue te gustaria pedir hoy?\n\nEscribe "menu" para ver las opciones.`,
-          newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
-        };
-      }
-      newContext.stage = 'ordering';
+    newContext.stage = 'ordering';
+    const menuText = buildMenuText(products);
+    if (customerName) {
       return {
-        response: `Hola! Bienvenido a Napoleon Pizzeria!\n\nPuedes pedir:\n- Pizzas\n- Empanadas\n- Bebidas\n- Postres\n- Promociones\n\nEscribe "menu" para ver todo.\n\nCual es tu nombre?`,
+        response: `Hola ${customerName}! Bienvenido de nuevo a Napoleon Pizzeria!\n\n${menuText}`,
         newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
       };
     }
-
-    if (msg.length > 0 && !msg.includes('menu') && !msg.includes('carta')) {
-      const words = userMessage.split(' ');
-      if (words.length <= 3) {
-        newCustomerName = userMessage;
-        newContext.stage = 'confirming_address';
-        return {
-          response: `Mucho gusto, ${userMessage}! A que direccion te llevamos el pedido?`,
-          newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
-        };
-      }
-    }
-
-    newContext.stage = 'ordering';
     return {
-      response: `Bienvenido a Napoleon Pizzeria! Que te gustaria pedir?\n\nEscribe "menu" para ver las opciones.`,
+      response: `Hola! Bienvenido a Napoleon Pizzeria!\n\n${menuText}`,
+      newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
+    };
+  }
+
+  if (context.stage === 'confirming_name') {
+    newCustomerName = userMessage.trim();
+    if (customerAddress) {
+      newContext.stage = 'selecting_payment';
+      return {
+        response: `Gracias ${newCustomerName}! Entregamos en ${customerAddress} como siempre.\n\nComo vas a pagar?\n\n1. Efectivo\n2. Transferencia\n3. Tarjeta\n4. QR`,
+        newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
+      };
+    }
+    newContext.stage = 'confirming_address';
+    return {
+      response: `Mucho gusto, ${newCustomerName}! A que direccion te llevamos el pedido?`,
       newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
     };
   }
 
   if (context.stage === 'confirming_address') {
-    if (msg !== 'si' && msg !== 'no') {
-      newCustomerAddress = userMessage;
-      newContext.stage = 'ordering';
-      return {
-        response: `Perfecto! Entregamos en: ${userMessage}\n\nQue te gustaria pedir?\nEscribe "menu" para ver las opciones o dime directamente que queres.`,
-        newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
-      };
-    }
+    newCustomerAddress = userMessage.trim();
+    newContext.stage = 'selecting_payment';
+    return {
+      response: `Perfecto! Entregamos en: ${newCustomerAddress}\n\nComo vas a pagar?\n\n1. Efectivo\n2. Transferencia\n3. Tarjeta\n4. QR`,
+      newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
+    };
   }
 
   if (context.stage === 'ordering') {
@@ -239,20 +329,37 @@ async function generateResponse(
       if (context.cart.length === 0) {
         return { response: 'Tu carrito esta vacio. Primero agrega productos.', newContext, customerName: newCustomerName, customerAddress: newCustomerAddress };
       }
-      if (!newCustomerAddress && !customerAddress) {
+      if (!customerName) {
+        newContext.stage = 'confirming_name';
+        return { response: 'Antes de confirmar, decime tu nombre por favor.', newContext, customerName: newCustomerName, customerAddress: newCustomerAddress };
+      }
+      if (!customerAddress) {
         newContext.stage = 'confirming_address';
         return { response: 'Cual es tu direccion para el delivery?', newContext, customerName: newCustomerName, customerAddress: newCustomerAddress };
       }
       newContext.stage = 'selecting_payment';
       return {
-        response: `Perfecto! Como vas a pagar?\n\n1. Efectivo\n2. Transferencia\n3. Tarjeta\n4. QR`,
+        response: `Perfecto! Entregamos en: ${customerAddress}\n\nComo vas a pagar?\n\n1. Efectivo\n2. Transferencia\n3. Tarjeta\n4. QR`,
         newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
       };
     }
 
     if (msg === 'menu' || msg === 'carta' || msg === 'opciones') {
       return {
-        response: `MENU NAPOLEON PIZZERIA:\n\nPIZZAS:\n- Margarita: $1200\n- Napolitana: $1400\n- Fugazzeta: $1500\n- Especial: $1800\n- Calabresa: $1700\n- Provolone: $1600\n- Roquefort: $1900\n- Palmitos: $2000\n\nEMPANADAS:\n- Carne/Pollo/Humita/Queso: $250\n- Jamon y Queso/Caprese: $280\n\nBEBIDAS:\n- Coca/Pepsi/Sprite/Fanta 500ml: $300\n- Coca 1.5L: $500\n- Agua: $200\n- Cerveza Quilmes/Stella 1L: $600-650\n\nPROMOCIONES:\n- 2 Pizzas Grandes: $3000\n- Pizza + Bebida: $1800\n- 12 Empanadas: $2500\n- Pizza + 6 Empanadas: $2200\n\nDime que queres pedir!`,
+        response: buildMenuText(products),
+        newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
+      };
+    }
+
+    const numberedSelections = parseNumberedSelections(msg, orderedProducts);
+    if (numberedSelections) {
+      for (const { product, quantity } of numberedSelections) {
+        newContext.cart.push({ productId: product.id, productName: product.name, quantity, price: product.price });
+      }
+      const addedSummary = numberedSelections.map(s => `${s.quantity}x ${s.product.name}`).join(', ');
+      const total = calculateTotal(newContext.cart);
+      return {
+        response: `Agregado: ${addedSummary}\n\nTotal: $${total.toLocaleString()}\n\nEscribe "ver" para ver el pedido, "menu" para seguir viendo opciones, o "confirmar" para terminar.`,
         newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
       };
     }
@@ -262,7 +369,7 @@ async function generateResponse(
     let quantity = 1;
     if (parsedQty) { productText = parsedQty.product; quantity = parsedQty.quantity; }
 
-    const product = findProductByText(productText);
+    const product = findProductByText(productText, products);
     if (product) {
       newContext.cart.push({ productId: product.id, productName: product.name, quantity, price: product.price });
       const subtotal = product.price * quantity;
@@ -303,11 +410,18 @@ async function generateResponse(
   }
 
   if (context.stage === 'finished') {
-    if (msg === 'nuevo pedido' || msg === 'nuevo' || msg === 'reiniciar') {
-      newContext = { stage: 'ordering', cart: [] };
-      return { response: 'Perfecto! Nuevo pedido iniciado. Que te gustaria pedir?', newContext, customerName: newCustomerName, customerAddress: newCustomerAddress };
+    newContext = { stage: 'ordering', cart: [] };
+    const menuText = buildMenuText(products);
+    if (customerName) {
+      return {
+        response: `Hola de nuevo, ${customerName}! Que te gustaria pedir esta vez?\n\n${menuText}`,
+        newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
+      };
     }
-    return { response: 'Tu pedido ya fue confirmado! Escribe "nuevo pedido" para hacer otro.', newContext, customerName: newCustomerName, customerAddress: newCustomerAddress };
+    return {
+      response: `Gracias por tu pedido! Si queres hacer otro, dime que te gustaria pedir.\n\n${menuText}`,
+      newContext, customerName: newCustomerName, customerAddress: newCustomerAddress,
+    };
   }
 
   return { response: 'Escribe "menu" para ver las opciones.', newContext, customerName: newCustomerName, customerAddress: newCustomerAddress };
@@ -358,19 +472,22 @@ async function processMessage(phoneNumber: string, userMessage: string, twilioMe
   const conversation = await getOrCreateConversation(phoneNumber);
   await saveMessage(conversation.id, 'inbound', userMessage, twilioMessageId);
 
+  const products = await fetchAvailableProducts();
+  const previousStage = conversation.context.stage;
   const { response, newContext, customerName, customerAddress } = await generateResponse(
     userMessage,
     conversation.context,
     conversation.customerName,
-    conversation.customerAddress
+    conversation.customerAddress,
+    products
   );
 
   await updateConversationContext(conversation.id, newContext, customerName, customerAddress);
   await sendTwilioMessage(phoneNumber, response, accountSid, authToken, fromNumber);
   await saveMessage(conversation.id, 'outbound', response);
 
-  if (newContext.stage === 'finished' && newContext.cart.length > 0) {
-    console.log('Order completed:', { customerName, customerAddress, cart: newContext.cart, paymentMethod: newContext.paymentMethod });
+  if (previousStage !== 'finished' && newContext.stage === 'finished' && newContext.cart.length > 0) {
+    await createPendingOrder(phoneNumber, newContext, customerName, customerAddress);
   }
 }
 

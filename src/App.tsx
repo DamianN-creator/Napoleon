@@ -17,6 +17,7 @@ import Cadetes from './components/Cadetes';
 import WhatsAppBot from './components/WhatsAppBot';
 import Stock from './components/Stock';
 import Settings from './components/Settings';
+import OnlineStore from './store/OnlineStore';
 import { Menu, DollarSign, Lock, Clock, RefreshCw } from 'lucide-react';
 
 function AppContent() {
@@ -236,6 +237,10 @@ function AuthGate() {
 }
 
 function App() {
+  if (window.location.pathname.startsWith('/tienda')) {
+    return <OnlineStore />;
+  }
+
   return (
     <AuthProvider>
       <AuthGate />
