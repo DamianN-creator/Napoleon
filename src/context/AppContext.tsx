@@ -39,7 +39,7 @@ interface AppContextType extends AppState {
   addCustomer: (customer: Customer) => void;
   updateCustomer: (customer: Customer) => void;
   deleteCustomer: (customerId: string) => void;
-  findCustomerByPhone: (phone: string) => Customer | undefined;
+  findCustomerByIdentity: (name: string, phone: string) => Customer | undefined;
   updateCustomerStats: (customerId: string, orderTotal: number, orderId: string) => void;
 
   // Cadetes
@@ -160,8 +160,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCustomers(prev => prev.filter(c => c.id !== customerId));
   }, [setCustomers]);
 
-  const findCustomerByPhone = useCallback((phone: string): Customer | undefined => {
-    return customers.find(c => c.phone === phone);
+  // Phone is the primary identity key; when it's missing, fall back to exact name so
+  // distinctly-named customers (or intentional shared buckets like "Pedidos Ya") still
+  // get their own record instead of merging with whoever else also lacks a phone
+  const findCustomerByIdentity = useCallback((name: string, phone: string): Customer | undefined => {
+    if (phone.trim()) return customers.find(c => c.phone === phone);
+    const normalizedName = name.trim().toLowerCase();
+    return customers.find(c => c.name.trim().toLowerCase() === normalizedName);
   }, [customers]);
 
   const updateCustomerStats = useCallback((customerId: string, orderTotal: number, orderId: string) => {
@@ -338,12 +343,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setStockMovements(prev => [...prev, ...newMovements]);
     }
 
-    // Update customer stats
-    const customer = customers.find(c => c.phone === order.customerPhone);
+    // Update customer stats — match by phone when present, otherwise by exact name
+    // (a blank phone must never match another customer's blank phone)
+    const customer = findCustomerByIdentity(order.customerName, order.customerPhone);
     if (customer) {
       updateCustomerStats(customer.id, order.total, order.id);
     }
-  }, [orders, customers, products, rawMaterials, subProducts, setOrders, setCadetes, setRawMaterials, setStockMovements, updateCustomerStats]);
+  }, [orders, products, rawMaterials, subProducts, setOrders, setCadetes, setRawMaterials, setStockMovements, updateCustomerStats, findCustomerByIdentity]);
 
   // Cadetes
   const addCadete = useCallback((cadete: Cadete) => {
@@ -611,7 +617,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addCustomer,
     updateCustomer,
     deleteCustomer,
-    findCustomerByPhone,
+    findCustomerByIdentity,
     updateCustomerStats,
     addCadete,
     updateCadete,
@@ -663,7 +669,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addCustomer,
     updateCustomer,
     deleteCustomer,
-    findCustomerByPhone,
+    findCustomerByIdentity,
     updateCustomerStats,
     addCadete,
     updateCadete,

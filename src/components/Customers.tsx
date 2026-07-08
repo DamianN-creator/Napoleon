@@ -16,6 +16,7 @@ import {
   Edit2,
   Trash2,
   Download,
+  RefreshCw,
   X,
 } from 'lucide-react';
 
@@ -98,21 +99,64 @@ export default function Customers() {
     closeModal();
   };
 
+  // Phone is the identity key when present; a blank phone falls back to exact name so
+  // distinctly-named customers (or intentional shared buckets like "Pedidos Ya") don't
+  // get merged with whoever else also lacks a phone
+  const matchesCustomer = (order: CustomerOrder, phone: string, name: string) =>
+    phone ? order.customerPhone === phone : order.customerName.trim().toLowerCase() === name;
+
   const getCustomerOrders = (customerId: string): CustomerOrder[] => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return [];
-    // Match by phone AND by recorded order id — orderHistory keeps the link even if the
-    // customer's phone gets edited later, which would otherwise orphan all past orders
+    // Also match by recorded order id — orderHistory keeps the link even if the
+    // customer's phone/name gets edited later, which would otherwise orphan past orders
+    const phone = customer.phone.trim();
+    const name = customer.name.trim().toLowerCase();
     const historyIds = new Set(customer.orderHistory);
     const seen = new Set<string>();
     const result: CustomerOrder[] = [];
     [...orders, ...completedOrders].forEach(o => {
-      if ((o.customerPhone === customer.phone || historyIds.has(o.id)) && !seen.has(o.id)) {
+      if ((matchesCustomer(o, phone, name) || historyIds.has(o.id)) && !seen.has(o.id)) {
         seen.add(o.id);
         result.push(o);
       }
     });
     return result;
+  };
+
+  // Recompute a customer's stats from the orders that genuinely belong to them,
+  // undoing any bad linkage from the blank-phone matching bug
+  const recalculateCustomerStats = (customer: Customer) => {
+    const phone = customer.phone.trim();
+    const name = customer.name.trim().toLowerCase();
+    const genuineOrders = [...orders, ...completedOrders].filter(
+      o => matchesCustomer(o, phone, name) && o.status === 'rendido'
+    );
+    const uniqueOrders = Array.from(new Map(genuineOrders.map(o => [o.id, o])).values());
+    const newOrderCount = uniqueOrders.length;
+    const newTotalSpent = uniqueOrders.reduce((sum, o) => sum + o.total, 0);
+    const newLastOrderDate = uniqueOrders.length > 0
+      ? new Date(Math.max(...uniqueOrders.map(o => new Date(o.createdAt).getTime())))
+      : undefined;
+
+    const matchDesc = phone ? `el telefono ${customer.phone}` : `el nombre "${customer.name}"`;
+    const confirmMsg =
+      `Recalcular estadisticas de "${customer.name}" segun los pedidos que realmente tienen ${matchDesc}:\n\n` +
+      `Pedidos: ${customer.orderCount} -> ${newOrderCount}\n` +
+      `Total gastado: $${customer.totalSpent.toLocaleString()} -> $${newTotalSpent.toLocaleString()}\n\n` +
+      `Esto no modifica los pedidos en si, solo las estadisticas guardadas en la ficha del cliente. Continuar?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const updated: Customer = {
+      ...customer,
+      orderCount: newOrderCount,
+      totalSpent: newTotalSpent,
+      orderHistory: uniqueOrders.map(o => o.id),
+      lastOrderDate: newLastOrderDate,
+    };
+    updateCustomer(updated);
+    setShowDetail(updated);
   };
 
   const formatDate = (date: Date | string) => {
@@ -441,6 +485,13 @@ export default function Customers() {
                   <p className="text-pink-200">{showDetail.phone}</p>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => recalculateCustomerStats(showDetail)}
+                    className="text-white/80 hover:text-white"
+                    title="Recalcular estadisticas segun los pedidos reales"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </button>
                   <button
                     onClick={() => { openEditModal(showDetail); setShowDetail(null); }}
                     className="text-white/80 hover:text-white"

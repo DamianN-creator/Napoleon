@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function OrderEntry() {
-  const { products, extras, addOrder, customers, findCustomerByPhone, addCustomer, updateCustomerStats, updateProduct } = useApp();
+  const { products, extras, addOrder, customers, findCustomerByIdentity, addCustomer, updateCustomerStats, updateProduct } = useApp();
 
   // Order state
   const [customerName, setCustomerName] = useState('');
@@ -416,7 +416,9 @@ export default function OrderEntry() {
       ? cash - total
       : undefined;
 
-    let customer = findCustomerByPhone(customerPhone);
+    // Match by phone when present; otherwise by exact name, so distinct customers
+    // without a phone (or intentional shared buckets like "Pedidos Ya") keep their own record
+    const customer = findCustomerByIdentity(customerName, customerPhone);
     if (!customer) {
       const newCustomer: Customer = {
         id: `customer-${Date.now()}`,
