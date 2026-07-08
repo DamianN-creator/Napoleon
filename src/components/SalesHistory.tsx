@@ -155,6 +155,11 @@ export default function SalesHistory() {
     return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const escapeCsvField = (value: string | number) => {
+    const str = String(value);
+    return /[;"\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+
   const exportToCSV = () => {
     const headers = ['Numero', 'Fecha', 'Hora', 'Cliente', 'Telefono', 'Tipo', 'Estado', 'Metodo Pago', 'Total'];
     const rows = filteredOrders.map(o => [
@@ -169,8 +174,11 @@ export default function SalesHistory() {
       o.total,
     ]);
 
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    // Excel en es-AR usa ";" como separador de columnas (la "," es el separador decimal)
+    const csv = '﻿' + [headers, ...rows]
+      .map(row => row.map(escapeCsvField).join(';'))
+      .join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
