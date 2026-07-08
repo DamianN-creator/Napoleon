@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Customer } from '../types';
+import { Customer, Order, CompletedOrder } from '../types';
+import { orderStatusColors, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
 import {
   Users,
   Search,
@@ -14,16 +15,20 @@ import {
   Star,
   Edit2,
   Trash2,
+  Download,
   X,
 } from 'lucide-react';
 
+type CustomerOrder = Order | CompletedOrder;
+
 export default function Customers() {
-  const { customers, orders, addCustomer, updateCustomer, deleteCustomer } = useApp();
+  const { customers, orders, completedOrders, addCustomer, updateCustomer, deleteCustomer } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'spent' | 'orders'>('spent');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [showDetail, setShowDetail] = useState<Customer | null>(null);
+  const [showOrderDetail, setShowOrderDetail] = useState<CustomerOrder | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -93,13 +98,60 @@ export default function Customers() {
     closeModal();
   };
 
-  const getCustomerOrders = (customerId: string) => {
-    return orders.filter(o => o.customerPhone === customers.find(c => c.id === customerId)?.phone);
+  const getCustomerOrders = (customerId: string): CustomerOrder[] => {
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return [];
+    // Match by phone AND by recorded order id — orderHistory keeps the link even if the
+    // customer's phone gets edited later, which would otherwise orphan all past orders
+    const historyIds = new Set(customer.orderHistory);
+    const seen = new Set<string>();
+    const result: CustomerOrder[] = [];
+    [...orders, ...completedOrders].forEach(o => {
+      if ((o.customerPhone === customer.phone || historyIds.has(o.id)) && !seen.has(o.id)) {
+        seen.add(o.id);
+        result.push(o);
+      }
+    });
+    return result;
   };
 
   const formatDate = (date: Date | string) => {
     const d = new Date(date);
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const formatTime = (date: Date | string) => {
+    const d = new Date(date);
+    return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const exportAllCustomersHistory = () => {
+    const headers = ['Cliente', 'Telefono', 'Numero', 'Fecha', 'Hora', 'Tipo', 'Estado', 'Metodo Pago', 'Items', 'Total'];
+    const rows = customers.flatMap(customer => {
+      const customerOrders = getCustomerOrders(customer.id)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return customerOrders.map(o => [
+        customer.name,
+        customer.phone,
+        o.orderNumber,
+        new Date(o.createdAt).toLocaleDateString('es-AR'),
+        new Date(o.createdAt).toLocaleTimeString('es-AR'),
+        o.orderType,
+        o.status,
+        o.paymentMethod,
+        o.items.length,
+        o.total,
+      ]);
+    });
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `historial-clientes-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Top customers
@@ -120,13 +172,27 @@ export default function Customers() {
             </div>
           </div>
 
-          <button
-            onClick={() => { setEditingCustomer(null); setFormData({ name: '', phone: '', address: '' }); setShowAddModal(true); }}
-            className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
-          >
-            <Users className="w-5 h-5" />
-            Nuevo Cliente
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={exportAllCustomersHistory}
+              disabled={customers.length === 0}
+              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+                customers.length === 0
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-gray-700 hover:bg-gray-600 text-white'
+              }`}
+            >
+              <Download className="w-5 h-5" />
+              Exportar Excel
+            </button>
+            <button
+              onClick={() => { setEditingCustomer(null); setFormData({ name: '', phone: '', address: '' }); setShowAddModal(true); }}
+              className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
+            >
+              <Users className="w-5 h-5" />
+              Nuevo Cliente
+            </button>
+          </div>
         </div>
 
         {/* Search and Sort */}
@@ -442,9 +508,12 @@ export default function Customers() {
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {getCustomerOrders(showDetail.id)
                       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                      .slice(0, 10)
                       .map(order => (
-                        <div key={order.id} className="bg-gray-750 rounded-lg p-3">
+                        <div
+                          key={order.id}
+                          className="bg-gray-750 rounded-lg p-3 cursor-pointer hover:bg-gray-700 transition-colors"
+                          onClick={() => setShowOrderDetail(order)}
+                        >
                           <div className="flex justify-between items-center">
                             <div>
                               <span className="text-white font-medium">#{order.orderNumber}</span>
@@ -459,6 +528,77 @@ export default function Customers() {
                       ))}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Detail Modal */}
+      {showOrderDetail && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4"
+          onClick={() => setShowOrderDetail(null)}
+        >
+          <div
+            className="bg-gray-800 rounded-xl border border-gray-700 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={`px-6 py-4 ${orderStatusColors[showOrderDetail.status]}`}>
+              <div className="flex justify-between items-center">
+                <span className="text-2xl font-bold">Pedido #{showOrderDetail.orderNumber}</span>
+                <button onClick={() => setShowOrderDetail(null)} className="text-white/80 hover:text-white text-xl">
+                  &times;
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-750 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs">Fecha</p>
+                  <p className="text-white">{formatDate(showOrderDetail.createdAt)}</p>
+                </div>
+                <div className="bg-gray-750 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs">Hora</p>
+                  <p className="text-white">{formatTime(showOrderDetail.createdAt)}</p>
+                </div>
+                <div className="bg-gray-750 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs">Tipo</p>
+                  <p className="text-white">{orderTypeLabels[showOrderDetail.orderType]}</p>
+                </div>
+                <div className="bg-gray-750 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs">Metodo Pago</p>
+                  <p className="text-white">{paymentMethodLabels[showOrderDetail.paymentMethod]}</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-750 rounded-lg p-3 flex items-center justify-between">
+                <span className="text-gray-400 text-xs">Estado</span>
+                <span className={`px-2 py-0.5 rounded text-xs ${orderStatusColors[showOrderDetail.status]}`}>
+                  {showOrderDetail.status}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-gray-400 text-xs mb-2">Productos</p>
+                <div className="space-y-2">
+                  {showOrderDetail.items.map((item, idx) => (
+                    <div key={idx} className="bg-gray-750 rounded p-2 flex justify-between">
+                      <span className="text-white">{item.quantity}x {item.productName}</span>
+                      <span className="text-green-400">${item.subtotal.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-700 pt-4">
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-400">Total</span>
+                  <span className={`font-bold ${showOrderDetail.status === 'rendido' ? 'text-green-400' : 'text-red-400'}`}>
+                    ${showOrderDetail.total.toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

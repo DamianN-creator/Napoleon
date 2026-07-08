@@ -15,6 +15,15 @@ import {
   Star,
 } from 'lucide-react';
 
+// Local (not UTC) calendar date, so evening orders in Argentina (UTC-3) aren't shifted to the next day
+const toLocalDateStr = (date: Date | string) => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 interface ProductRanking {
   productId: string;
   productName: string;
@@ -48,17 +57,11 @@ export default function ProductsRanking() {
     let filteredOrders = allOrders;
 
     if (dateFrom) {
-      filteredOrders = filteredOrders.filter(o => {
-        const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-        return orderDate >= dateFrom;
-      });
+      filteredOrders = filteredOrders.filter(o => toLocalDateStr(o.createdAt) >= dateFrom);
     }
 
     if (dateTo) {
-      filteredOrders = filteredOrders.filter(o => {
-        const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-        return orderDate <= dateTo;
-      });
+      filteredOrders = filteredOrders.filter(o => toLocalDateStr(o.createdAt) <= dateTo);
     }
 
     // Aggregate product data
@@ -136,8 +139,13 @@ export default function ProductsRanking() {
 
   const formatDateRange = () => {
     if (!dateFrom && !dateTo) return 'Todo el periodo';
-    const from = dateFrom ? new Date(dateFrom).toLocaleDateString('es-AR') : 'Inicio';
-    const to = dateTo ? new Date(dateTo).toLocaleDateString('es-AR') : 'Hoy';
+    // Date-only strings (YYYY-MM-DD) parse as UTC midnight; interpret as local to avoid off-by-one-day shifts
+    const formatLocal = (dateStr: string) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day).toLocaleDateString('es-AR');
+    };
+    const from = dateFrom ? formatLocal(dateFrom) : 'Inicio';
+    const to = dateTo ? formatLocal(dateTo) : 'Hoy';
     return `${from} - ${to}`;
   };
 

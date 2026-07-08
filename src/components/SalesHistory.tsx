@@ -134,7 +134,14 @@ export default function SalesHistory() {
   }, [filteredOrders]);
 
   const formatDate = (date: Date | string) => {
-    const d = new Date(date);
+    // Date-only strings (YYYY-MM-DD) parse as UTC midnight; interpret as local to avoid off-by-one-day shifts
+    let d: Date;
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const [year, month, day] = date.split('-').map(Number);
+      d = new Date(year, month - 1, day);
+    } else {
+      d = new Date(date);
+    }
     return d.toLocaleDateString('es-AR', {
       weekday: 'long',
       year: 'numeric',
