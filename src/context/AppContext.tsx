@@ -157,8 +157,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [setCustomers]);
 
   const deleteCustomer = useCallback((customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
     setCustomers(prev => prev.filter(c => c.id !== customerId));
-  }, [setCustomers]);
+    if (!customer) return;
+
+    // Also purge this customer's orders from sales history and give back any stock
+    // they consumed — otherwise a deleted (e.g. test) customer leaves orphaned sales/stock behind
+    const phone = customer.phone.trim();
+    const name = customer.name.trim().toLowerCase();
+    const matches = (o: Order | CompletedOrder) =>
+      phone ? o.customerPhone === phone : o.customerName.trim().toLowerCase() === name;
+
+    const removedIds = new Set([
+      ...orders.filter(matches).map(o => o.id),
+      ...completedOrders.filter(matches).map(o => o.id),
+    ]);
+    if (removedIds.size === 0) return;
+
+    setOrders(prev => prev.filter(o => !removedIds.has(o.id)));
+    setCompletedOrders(prev => prev.filter(o => !removedIds.has(o.id)));
+
+    const consumedMovements = stockMovements.filter(
+      m => m.type === 'consumo' && m.orderId && removedIds.has(m.orderId)
+    );
+    if (consumedMovements.length > 0) {
+      const restock: Record<string, number> = {};
+      consumedMovements.forEach(m => {
+        restock[m.rawMaterialId] = (restock[m.rawMaterialId] || 0) + Math.abs(m.quantity);
+      });
+      setRawMaterials(prev => prev.map(rm =>
+        restock[rm.id] !== undefined ? { ...rm, currentStock: rm.currentStock + restock[rm.id] } : rm
+      ));
+      const consumedIds = new Set(consumedMovements.map(m => m.id));
+      setStockMovements(prev => prev.filter(m => !consumedIds.has(m.id)));
+    }
+  }, [customers, orders, completedOrders, stockMovements, setCustomers, setOrders, setCompletedOrders, setRawMaterials, setStockMovements]);
 
   // Phone is the primary identity key; when it's missing, fall back to exact name so
   // distinctly-named customers (or intentional shared buckets like "Pedidos Ya") still

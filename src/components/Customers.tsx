@@ -67,7 +67,12 @@ export default function Customers() {
   };
 
   const handleDeleteCustomer = (customer: Customer) => {
-    if (!confirm(`Eliminar a ${customer.name}? Esta accion no se puede deshacer.`)) return;
+    const linkedOrders = getCustomerOrders(customer.id);
+    const linkedTotal = linkedOrders.reduce((sum, o) => sum + o.total, 0);
+    const impactMsg = linkedOrders.length > 0
+      ? `\n\nOJO: esto tambien va a borrar del Historial de Ventas ${linkedOrders.length} pedido(s) por un total de $${linkedTotal.toLocaleString()}, de forma permanente. Si "${customer.name}" es un nombre generico compartido (ej. Pedidos Ya, Cliente 1), se van a borrar TODAS las ventas registradas con ese nombre, no solo una.`
+      : '';
+    if (!confirm(`Eliminar a ${customer.name}? Esta accion no se puede deshacer.${impactMsg}`)) return;
     deleteCustomer(customer.id);
     if (showDetail?.id === customer.id) setShowDetail(null);
   };
