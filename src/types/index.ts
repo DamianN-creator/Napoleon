@@ -22,6 +22,7 @@ export interface Product {
   price: number;
   halfPrice?: number;
   pedidosYaPrice?: number;
+  pedidosYaHalfPrice?: number;
   category: ProductCategory;
   ingredients: string[];
   image?: string;
@@ -96,7 +97,7 @@ export interface Customer {
   orderHistory: string[];
 }
 
-export type CashShiftMovementType = 'gasto' | 'ingreso';
+export type CashShiftMovementType = 'gasto' | 'ingreso' | 'retiro';
 
 export interface CashShiftMovement {
   id: string;

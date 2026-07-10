@@ -252,7 +252,8 @@ export default function OrderEntry() {
     }
     setPortionProduct(product);
     const basePrice = (getProductPrice(product) as number);
-    const defaultHalf = product.halfPrice !== undefined ? product.halfPrice : Math.round(basePrice / 2);
+    const configuredHalf = isPedidosYa ? product.pedidosYaHalfPrice : product.halfPrice;
+    const defaultHalf = configuredHalf !== undefined ? configuredHalf : Math.round(basePrice / 2);
     setPortionHalfPrice(String(defaultHalf));
     setShowPortionModal(true);
   };

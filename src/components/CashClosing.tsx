@@ -26,8 +26,25 @@ import {
   AlertCircle,
   ChevronLeft,
 } from 'lucide-react';
+import { CashShiftMovementType } from '../types';
 
 type Tab = 'turno' | 'historial';
+
+// Gasto/retiro reducen el efectivo de caja; solo "gasto" es un egreso economico real
+// (retiro e ingreso son movimientos financieros y quedan fuera del Informe de Resultado)
+const MOVEMENT_META: Record<CashShiftMovementType, {
+  label: string;
+  sign: '+' | '-';
+  Icon: typeof ArrowDownCircle;
+  rowBg: string;
+  text: string;
+  activeBg: string;
+  placeholder: string;
+}> = {
+  gasto: { label: 'Gasto', sign: '-', Icon: ArrowDownCircle, rowBg: 'bg-orange-500/5', text: 'text-orange-400', activeBg: 'bg-orange-500 text-white', placeholder: 'Ej: Compra de insumos' },
+  retiro: { label: 'Retiro', sign: '-', Icon: ArrowDownCircle, rowBg: 'bg-purple-500/5', text: 'text-purple-400', activeBg: 'bg-purple-500 text-white', placeholder: 'Ej: Retiro de efectivo para el banco' },
+  ingreso: { label: 'Ingreso', sign: '+', Icon: ArrowUpCircle, rowBg: 'bg-teal-500/5', text: 'text-teal-400', activeBg: 'bg-teal-500 text-white', placeholder: 'Ej: Propina adicional' },
+};
 
 export default function CashClosing() {
   const {
@@ -44,7 +61,8 @@ export default function CashClosing() {
 
   // Movement modal
   const [showMovementModal, setShowMovementModal] = useState(false);
-  const [movementType, setMovementType] = useState<'gasto' | 'ingreso'>('gasto');
+  const [movementType, setMovementType] = useState<CashShiftMovementType>('gasto');
+  const activeMovementMeta = MOVEMENT_META[movementType];
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
 
@@ -100,9 +118,10 @@ export default function CashClosing() {
   const shiftStats = useMemo(() => {
     if (!activeShift) return null;
     const expenses = activeShift.movements.filter(m => m.type === 'gasto').reduce((sum, m) => sum + m.amount, 0);
+    const withdrawals = activeShift.movements.filter(m => m.type === 'retiro').reduce((sum, m) => sum + m.amount, 0);
     const extraIncome = activeShift.movements.filter(m => m.type === 'ingreso').reduce((sum, m) => sum + m.amount, 0);
-    const systemCash = activeShift.openingAmount + sessionStats.cashSales + extraIncome - expenses;
-    return { expenses, extraIncome, systemCash };
+    const systemCash = activeShift.openingAmount + sessionStats.cashSales + extraIncome - expenses - withdrawals;
+    return { expenses, withdrawals, extraIncome, systemCash };
   }, [activeShift, sessionStats.cashSales]);
 
   const closedShifts = useMemo(() => {
@@ -285,6 +304,13 @@ export default function CashClosing() {
                         Gasto
                       </button>
                       <button
+                        onClick={() => { setMovementType('retiro'); setShowMovementModal(true); }}
+                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 border border-white/30"
+                      >
+                        <ArrowDownCircle className="w-4 h-4" />
+                        Retiro
+                      </button>
+                      <button
                         onClick={() => { setMovementType('ingreso'); setShowMovementModal(true); }}
                         className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 border border-white/30"
                       >
@@ -302,7 +328,7 @@ export default function CashClosing() {
                   </div>
 
                   {shiftStats && (
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                       <div className="bg-white/10 rounded-lg p-3 text-center">
                         <p className="text-white/70 text-xs mb-1">Apertura</p>
                         <p className="text-white font-bold text-lg">${activeShift.openingAmount.toLocaleString()}</p>
@@ -318,6 +344,10 @@ export default function CashClosing() {
                       <div className="bg-orange-500/30 rounded-lg p-3 text-center">
                         <p className="text-white/70 text-xs mb-1">- Gastos</p>
                         <p className="text-orange-100 font-bold text-lg">-${shiftStats.expenses.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-purple-500/30 rounded-lg p-3 text-center">
+                        <p className="text-white/70 text-xs mb-1">- Retiros</p>
+                        <p className="text-purple-100 font-bold text-lg">-${shiftStats.withdrawals.toLocaleString()}</p>
                       </div>
                       <div className="bg-cyan-500/30 rounded-lg p-3 text-center ring-2 ring-cyan-300">
                         <p className="text-white/70 text-xs mb-1">Caja Esperada</p>
@@ -449,25 +479,23 @@ export default function CashClosing() {
                       Movimientos del Turno ({activeShift.movements.length})
                     </h2>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {activeShift.movements.map(m => (
-                        <div key={m.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${
-                          m.type === 'gasto' ? 'bg-orange-500/5' : 'bg-teal-500/5'
-                        }`}>
-                          <div className="flex items-center gap-2">
-                            {m.type === 'gasto'
-                              ? <ArrowDownCircle className="w-4 h-4 text-orange-400" />
-                              : <ArrowUpCircle className="w-4 h-4 text-teal-400" />
-                            }
-                            <span className="text-white">{m.description}</span>
+                      {activeShift.movements.map(m => {
+                        const meta = MOVEMENT_META[m.type];
+                        return (
+                          <div key={m.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${meta.rowBg}`}>
+                            <div className="flex items-center gap-2">
+                              <meta.Icon className={`w-4 h-4 ${meta.text}`} />
+                              <span className="text-white">{m.description}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-gray-500 text-xs">{formatTime(m.createdAt)}</span>
+                              <span className={`${meta.text} font-bold`}>
+                                {meta.sign}${m.amount.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-gray-500 text-xs">{formatTime(m.createdAt)}</span>
-                            <span className={m.type === 'gasto' ? 'text-orange-400 font-bold' : 'text-teal-400 font-bold'}>
-                              {m.type === 'gasto' ? '-' : '+'}${m.amount.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -666,34 +694,39 @@ export default function CashClosing() {
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                {movementType === 'gasto'
-                  ? <><ArrowDownCircle className="w-6 h-6 text-orange-400" /> Registrar Gasto</>
-                  : <><ArrowUpCircle className="w-6 h-6 text-teal-400" /> Registrar Ingreso</>
-                }
+                <activeMovementMeta.Icon className={`w-6 h-6 ${activeMovementMeta.text}`} />
+                Registrar {activeMovementMeta.label}
               </h2>
               <button onClick={() => setShowMovementModal(false)} className="text-gray-400 hover:text-white">
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {(['gasto', 'ingreso'] as const).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setMovementType(type)}
-                  className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                    movementType === type
-                      ? type === 'gasto' ? 'bg-orange-500 text-white' : 'bg-teal-500 text-white'
-                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                  }`}
-                >
-                  {type === 'gasto'
-                    ? <><ArrowDownCircle className="w-4 h-4" /> Gasto</>
-                    : <><ArrowUpCircle className="w-4 h-4" /> Ingreso</>
-                  }
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {(['gasto', 'retiro', 'ingreso'] as const).map(type => {
+                const meta = MOVEMENT_META[type];
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setMovementType(type)}
+                    className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
+                      movementType === type
+                        ? meta.activeBg
+                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    }`}
+                  >
+                    <meta.Icon className="w-4 h-4" />
+                    {meta.label}
+                  </button>
+                );
+              })}
             </div>
+
+            {movementType === 'retiro' && (
+              <p className="text-purple-300/80 text-xs bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 mb-4">
+                Los retiros descuentan el efectivo de caja pero no se consideran un gasto en el Informe de Resultado.
+              </p>
+            )}
 
             <div className="space-y-4 mb-6">
               <div>
@@ -704,7 +737,7 @@ export default function CashClosing() {
                   value={movementDescription}
                   onChange={e => setMovementDescription(e.target.value)}
                   className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-cyan-500 focus:outline-none"
-                  placeholder={movementType === 'gasto' ? 'Ej: Compra de insumos' : 'Ej: Propina adicional'}
+                  placeholder={MOVEMENT_META[movementType].placeholder}
                 />
               </div>
               <div>
@@ -732,9 +765,7 @@ export default function CashClosing() {
                 disabled={!movementAmount || Number(movementAmount) <= 0 || !movementDescription.trim()}
                 className={`flex-1 py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${
                   movementAmount && Number(movementAmount) > 0 && movementDescription.trim()
-                    ? movementType === 'gasto'
-                      ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                      : 'bg-teal-500 hover:bg-teal-600 text-white'
+                    ? `${MOVEMENT_META[movementType].activeBg} hover:opacity-90`
                     : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 }`}
               >
@@ -778,6 +809,10 @@ export default function CashClosing() {
                 <div className="flex justify-between">
                   <span className="text-gray-400">- Gastos</span>
                   <span className="text-orange-400">-${shiftStats.expenses.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">- Retiros</span>
+                  <span className="text-purple-400">-${shiftStats.withdrawals.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-gray-600">
                   <span className="text-white font-bold">Efectivo esperado</span>
@@ -885,6 +920,7 @@ function ShiftDetail({
 }) {
   const ss = shift.salesSummary;
   const expenses = shift.movements.filter(m => m.type === 'gasto').reduce((s, m) => s + m.amount, 0);
+  const withdrawals = shift.movements.filter(m => m.type === 'retiro').reduce((s, m) => s + m.amount, 0);
   const extraIncome = shift.movements.filter(m => m.type === 'ingreso').reduce((s, m) => s + m.amount, 0);
 
   return (
@@ -944,6 +980,12 @@ function ShiftDetail({
               <div className="flex justify-between py-1">
                 <span className="text-gray-400">- Gastos</span>
                 <span className="text-orange-400">-${expenses.toLocaleString()}</span>
+              </div>
+            )}
+            {withdrawals > 0 && (
+              <div className="flex justify-between py-1">
+                <span className="text-gray-400">- Retiros</span>
+                <span className="text-purple-400">-${withdrawals.toLocaleString()}</span>
               </div>
             )}
             {shift.arqueo && (
@@ -1066,25 +1108,23 @@ function ShiftDetail({
             Movimientos ({shift.movements.length})
           </h3>
           <div className="space-y-2">
-            {shift.movements.map(m => (
-              <div key={m.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${
-                m.type === 'gasto' ? 'bg-orange-500/5' : 'bg-teal-500/5'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {m.type === 'gasto'
-                    ? <ArrowDownCircle className="w-4 h-4 text-orange-400" />
-                    : <ArrowUpCircle className="w-4 h-4 text-teal-400" />
-                  }
-                  <span className="text-white text-sm">{m.description}</span>
+            {shift.movements.map(m => {
+              const meta = MOVEMENT_META[m.type];
+              return (
+                <div key={m.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${meta.rowBg}`}>
+                  <div className="flex items-center gap-2">
+                    <meta.Icon className={`w-4 h-4 ${meta.text}`} />
+                    <span className="text-white text-sm">{m.description}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-gray-500 text-xs">{formatTime(m.createdAt)}</span>
+                    <span className={`font-bold text-sm ${meta.text}`}>
+                      {meta.sign}${m.amount.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-gray-500 text-xs">{formatTime(m.createdAt)}</span>
-                  <span className={`font-bold text-sm ${m.type === 'gasto' ? 'text-orange-400' : 'text-teal-400'}`}>
-                    {m.type === 'gasto' ? '-' : '+'}${m.amount.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

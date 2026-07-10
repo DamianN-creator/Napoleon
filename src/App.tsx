@@ -17,6 +17,7 @@ import Cadetes from './components/Cadetes';
 import WhatsAppBot from './components/WhatsAppBot';
 import Stock from './components/Stock';
 import Settings from './components/Settings';
+import ResultsReport from './components/ResultsReport';
 import OnlineStore from './store/OnlineStore';
 import { Menu, DollarSign, Lock, Clock, RefreshCw } from 'lucide-react';
 
@@ -178,6 +179,8 @@ function AppContent() {
         return <ProductsRanking />;
       case 'cash':
         return <CashClosing />;
+      case 'results':
+        return isSuperAdmin ? <ResultsReport /> : <Dashboard />;
       case 'settings':
         return <Settings />;
       default:
@@ -205,6 +208,7 @@ function AppContent() {
           setActiveTab={setActiveTab}
           isOpen={sidebarOpen}
           setIsOpen={setSidebarOpen}
+          isSuperAdmin={isSuperAdmin}
         />
         <main className="flex-1 lg:ml-0 mt-14 lg:mt-0">
           {renderContent()}

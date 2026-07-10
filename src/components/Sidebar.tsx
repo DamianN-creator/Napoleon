@@ -16,6 +16,7 @@ import {
   Settings,
   Sparkles,
   LogOut,
+  Scale,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -24,9 +25,10 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  isSuperAdmin: boolean;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isSuperAdmin }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'cash', label: 'Caja', icon: DollarSign },
@@ -41,6 +43,7 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }: 
     { id: 'whatsapp', label: 'WhatsApp Bot', icon: Bot },
     { id: 'history', label: 'Historial de Ventas', icon: History },
     { id: 'ranking', label: 'Ranking Productos', icon: BarChart3 },
+    ...(isSuperAdmin ? [{ id: 'results', label: 'Informe de Resultado', icon: Scale }] : []),
     { id: 'settings', label: 'Configuración', icon: Settings },
   ];
 

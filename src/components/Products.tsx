@@ -34,6 +34,7 @@ export default function Products() {
     price: 0,
     halfPrice: '' as number | '',
     pedidosYaPrice: '' as number | '',
+    pedidosYaHalfPrice: '' as number | '',
     category: 'pizzas' as ProductCategory,
     ingredients: '',
     available: true,
@@ -98,6 +99,7 @@ export default function Products() {
       price: formData.price,
       halfPrice: formData.halfPrice !== '' ? Number(formData.halfPrice) : undefined,
       pedidosYaPrice: formData.pedidosYaPrice !== '' ? Number(formData.pedidosYaPrice) : undefined,
+      pedidosYaHalfPrice: formData.pedidosYaHalfPrice !== '' ? Number(formData.pedidosYaHalfPrice) : undefined,
       category: formData.category,
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
@@ -122,6 +124,7 @@ export default function Products() {
       price: formData.price,
       halfPrice: formData.halfPrice !== '' ? Number(formData.halfPrice) : undefined,
       pedidosYaPrice: formData.pedidosYaPrice !== '' ? Number(formData.pedidosYaPrice) : undefined,
+      pedidosYaHalfPrice: formData.pedidosYaHalfPrice !== '' ? Number(formData.pedidosYaHalfPrice) : undefined,
       category: formData.category,
       ingredients: formData.ingredients.split(',').map(i => i.trim()).filter(Boolean),
       available: formData.available,
@@ -149,7 +152,7 @@ export default function Products() {
 
   const resetForm = () => {
     setFormData({
-      name: '', price: 0, halfPrice: '', pedidosYaPrice: '', category: 'pizzas',
+      name: '', price: 0, halfPrice: '', pedidosYaPrice: '', pedidosYaHalfPrice: '', category: 'pizzas',
       ingredients: '', available: true, isPizza: false,
       image: '', description: '', publishedOnline: false,
     });
@@ -167,6 +170,7 @@ export default function Products() {
       price: product.price,
       halfPrice: product.halfPrice ?? '',
       pedidosYaPrice: product.pedidosYaPrice ?? '',
+      pedidosYaHalfPrice: product.pedidosYaHalfPrice ?? '',
       category: product.category,
       ingredients: product.ingredients.join(', '),
       available: product.available,
@@ -452,21 +456,40 @@ export default function Products() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-gray-400 text-sm flex items-center gap-2">
-                  <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded font-semibold">PY</span>
-                  Precio PedidosYa <span className="text-gray-600">(opcional)</span>
-                </label>
-                <div className="relative mt-1">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-orange-500/60" />
-                  <input
-                    type="number"
-                    value={formData.pedidosYaPrice}
-                    onChange={e => setFormData({ ...formData, pedidosYaPrice: e.target.value === '' ? '' : Number(e.target.value) })}
-                    className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-orange-500 focus:outline-none"
-                    placeholder="—"
-                    min="0"
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-400 text-sm flex items-center gap-2">
+                    <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded font-semibold">PY</span>
+                    Precio entero <span className="text-gray-600">(opcional)</span>
+                  </label>
+                  <div className="relative mt-1">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-orange-500/60" />
+                    <input
+                      type="number"
+                      value={formData.pedidosYaPrice}
+                      onChange={e => setFormData({ ...formData, pedidosYaPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                      className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="—"
+                      min="0"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm flex items-center gap-2">
+                    <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded font-semibold">PY</span>
+                    Precio medio <span className="text-gray-600">(opcional)</span>
+                  </label>
+                  <div className="relative mt-1">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-orange-500/60" />
+                    <input
+                      type="number"
+                      value={formData.pedidosYaHalfPrice}
+                      onChange={e => setFormData({ ...formData, pedidosYaHalfPrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                      className="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="—"
+                      min="0"
+                    />
+                  </div>
                 </div>
               </div>
 
