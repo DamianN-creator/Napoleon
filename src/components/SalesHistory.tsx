@@ -20,6 +20,26 @@ import {
   Pencil,
 } from 'lucide-react';
 
+type WeekdayMetricKey = 'qty' | 'revenue' | 'ticket';
+
+// Fixed identity -> color mapping, matching the colors already used for these same
+// concepts in the Stats Cards above (green = money, teal = ticket promedio). Never
+// reassigned when a metric is toggled off — color always follows the entity.
+const WEEKDAY_METRIC_CONFIG: Record<WeekdayMetricKey, { label: string; dot: string; bar: string; text: string; format: (v: number) => string }> = {
+  qty: { label: 'Productos', dot: 'bg-blue-500', bar: 'bg-blue-500', text: 'text-blue-400', format: v => Math.round(v).toString() },
+  revenue: { label: 'Facturacion', dot: 'bg-green-500', bar: 'bg-green-500', text: 'text-green-400', format: v => `$${Math.round(v).toLocaleString()}` },
+  ticket: { label: 'Ticket Promedio', dot: 'bg-teal-500', bar: 'bg-teal-500', text: 'text-teal-400', format: v => `$${Math.round(v).toLocaleString()}` },
+};
+
+// Chart layout constants (px). MAX_BAR_HEIGHT leaves fixed headroom above every bar for
+// its vertical value label, so the tallest bar + longest label never overflows the
+// chart area regardless of how big the numbers get — verified against worst-case values
+// (7-digit revenue, all 3 metrics on) with a rendered screenshot before shipping.
+const WEEKDAY_CHART_HEIGHT = 260;
+const WEEKDAY_LABEL_RESERVE = 140;
+const WEEKDAY_MAX_BAR_HEIGHT = WEEKDAY_CHART_HEIGHT - WEEKDAY_LABEL_RESERVE;
+const WEEKDAY_BAR_WIDTH = 28;
+
 export default function SalesHistory() {
   const { orders, completedOrders, cashShifts, updateOrder, updateCompletedOrder } = useApp();
   const { isSuperAdmin } = useAuth();
@@ -32,6 +52,13 @@ export default function SalesHistory() {
   const [showOrderDetail, setShowOrderDetail] = useState<HistoryOrder | null>(null);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<OrderEditForm | null>(null);
+  const [visibleMetrics, setVisibleMetrics] = useState<Record<WeekdayMetricKey, boolean>>({
+    qty: true,
+    revenue: true,
+    ticket: true,
+  });
+  const toggleWeekdayMetric = (key: WeekdayMetricKey) =>
+    setVisibleMetrics(prev => ({ ...prev, [key]: !prev[key] }));
 
   const closeOrderDetail = useCallback(() => {
     setShowOrderDetail(null);
@@ -161,6 +188,69 @@ export default function SalesHistory() {
     };
   }, [filteredOrders]);
 
+  // Per-weekday metrics across the filtered date range, indexed to a common base (100 =
+  // that metric's own overall daily average for the period) so quantity, revenue and
+  // ticket — three completely different scales/units — can share one axis without one
+  // dwarfing the others.
+  // - qty/revenue: total units/revenue on that weekday / distinct days it appeared, so a
+  //   weekday observed more often isn't just summed higher than one observed less.
+  // - ticket: pooled revenue / pooled order count for that weekday (the standard "average
+  //   order value" definition — not an average of daily averages, which would let a
+  //   low-volume day skew the ticket average as much as a high-volume one).
+  const weekdayChart = useMemo(() => {
+    const byDate: Record<string, { qty: number; revenue: number; orderCount: number }> = {};
+    filteredOrders
+      .filter(o => o.status === 'rendido')
+      .forEach(o => {
+        const date = getOrderShiftDate(o);
+        const qty = o.items.reduce((sum, item) => sum + item.quantity, 0);
+        if (!byDate[date]) byDate[date] = { qty: 0, revenue: 0, orderCount: 0 };
+        byDate[date].qty += qty;
+        byDate[date].revenue += o.total;
+        byDate[date].orderCount += 1;
+      });
+
+    const labels = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'];
+    const qtyTotals = Array(7).fill(0);
+    const revenueTotals = Array(7).fill(0);
+    const orderCounts = Array(7).fill(0);
+    const daysObserved = Array(7).fill(0);
+
+    Object.entries(byDate).forEach(([date, d]) => {
+      const [year, month, day] = date.split('-').map(Number);
+      const jsDay = new Date(year, month - 1, day).getDay(); // 0=Sun..6=Sat
+      const idx = jsDay === 0 ? 6 : jsDay - 1; // 0=Mon..6=Sun
+      qtyTotals[idx] += d.qty;
+      revenueTotals[idx] += d.revenue;
+      orderCounts[idx] += d.orderCount;
+      daysObserved[idx] += 1;
+    });
+
+    const totalDays = daysObserved.reduce((a, b) => a + b, 0);
+    const totalOrders = orderCounts.reduce((a, b) => a + b, 0);
+    const overallAvgQty = totalDays > 0 ? qtyTotals.reduce((a, b) => a + b, 0) / totalDays : 0;
+    const overallAvgRevenue = totalDays > 0 ? revenueTotals.reduce((a, b) => a + b, 0) / totalDays : 0;
+    const overallAvgTicket = totalOrders > 0 ? revenueTotals.reduce((a, b) => a + b, 0) / totalOrders : 0;
+
+    const toMetric = (value: number, overallAvg: number) => ({
+      value,
+      index: overallAvg > 0 ? (value / overallAvg) * 100 : 0,
+    });
+
+    return labels.map((label, idx) => {
+      const avgQty = daysObserved[idx] > 0 ? qtyTotals[idx] / daysObserved[idx] : 0;
+      const avgRevenue = daysObserved[idx] > 0 ? revenueTotals[idx] / daysObserved[idx] : 0;
+      const avgTicket = orderCounts[idx] > 0 ? revenueTotals[idx] / orderCounts[idx] : 0;
+      return {
+        label,
+        daysObserved: daysObserved[idx],
+        qty: toMetric(avgQty, overallAvgQty),
+        revenue: toMetric(avgRevenue, overallAvgRevenue),
+        ticket: toMetric(avgTicket, overallAvgTicket),
+      };
+    });
+  }, [filteredOrders, getOrderShiftDate]);
+
   const formatDate = (date: Date | string) => {
     // Date-only strings (YYYY-MM-DD) parse as UTC midnight; interpret as local to avoid off-by-one-day shifts
     let d: Date;
@@ -214,6 +304,11 @@ export default function SalesHistory() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const visibleWeekdayMetricKeys = (Object.keys(visibleMetrics) as WeekdayMetricKey[]).filter(k => visibleMetrics[k]);
+  // 100 always anchors the reference line; bars can extend past it, so the ceiling is
+  // whichever is bigger — never below 100 or the chart baseline would be off-screen
+  const maxWeekdayIndex = Math.max(100, ...weekdayChart.flatMap(d => visibleWeekdayMetricKeys.map(k => d[k].index)));
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 md:p-6">
@@ -315,6 +410,101 @@ export default function SalesHistory() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Weekday Averages */}
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 mb-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Promedios por Dia de Semana</h2>
+          <p className="text-gray-500 text-xs mb-3">
+            Indexado a 100 = promedio diario del periodo filtrado (linea punteada), para poder comparar variables de distinta escala en un mismo grafico
+          </p>
+
+          {/* Legend / toggles */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {(Object.keys(WEEKDAY_METRIC_CONFIG) as WeekdayMetricKey[]).map(key => {
+              const meta = WEEKDAY_METRIC_CONFIG[key];
+              const active = visibleMetrics[key];
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleWeekdayMetric(key)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    active ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-700 bg-gray-800 text-gray-500'
+                  }`}
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${active ? meta.dot : 'bg-gray-600'}`} />
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {visibleWeekdayMetricKeys.length === 0 ? (
+            <p className="text-gray-500 text-center py-12">Selecciona al menos una variable</p>
+          ) : weekdayChart.every(d => d.daysObserved === 0) ? (
+            <p className="text-gray-500 text-center py-12">No hay ventas suficientes para este grafico</p>
+          ) : (
+            <div className="pt-2">
+              {/* Bars — each bar's value sits directly above it (vertical text), with fixed
+                  headroom reserved so the tallest bar + longest label never overflows */}
+              <div className="relative" style={{ height: WEEKDAY_CHART_HEIGHT }}>
+                {/* 100% baseline = the period's overall daily average (see subtitle above) */}
+                <div
+                  className="absolute left-0 right-0 border-t border-dashed border-gray-600"
+                  style={{ bottom: `${(100 / maxWeekdayIndex) * WEEKDAY_MAX_BAR_HEIGHT}px` }}
+                />
+
+                <div className="flex items-end justify-between gap-2 sm:gap-4 h-full">
+                  {weekdayChart.map(d => (
+                    <div key={d.label} className="flex-1 flex items-end justify-center gap-1.5 sm:gap-2 h-full">
+                      {visibleWeekdayMetricKeys.map(key => {
+                        const meta = WEEKDAY_METRIC_CONFIG[key];
+                        const metric = d[key];
+                        const barHeight = metric.value > 0
+                          ? Math.max((metric.index / maxWeekdayIndex) * WEEKDAY_MAX_BAR_HEIGHT, 3)
+                          : 0;
+                        return (
+                          <div
+                            key={key}
+                            className="relative flex flex-col items-center justify-end h-full"
+                            style={{ width: WEEKDAY_BAR_WIDTH }}
+                          >
+                            <div
+                              className={`${meta.bar} rounded-t-sm transition-all`}
+                              style={{ width: WEEKDAY_BAR_WIDTH, height: barHeight }}
+                              title={`${meta.label} - ${d.label}: ${meta.format(metric.value)} (${Math.round(metric.index)}% del promedio, ${d.daysObserved} ${d.daysObserved === 1 ? 'dia' : 'dias'})`}
+                            />
+                            {metric.value > 0 && (
+                              <span
+                                className={`absolute text-[11px] font-bold whitespace-nowrap ${meta.text}`}
+                                style={{
+                                  bottom: barHeight + 4,
+                                  left: '50%',
+                                  transform: 'translateX(-50%) rotate(180deg)',
+                                  writingMode: 'vertical-rl',
+                                }}
+                              >
+                                {meta.format(metric.value)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weekday names */}
+              <div className="flex justify-between gap-2 sm:gap-4 mt-2">
+                {weekdayChart.map(d => (
+                  <div key={d.label} className="flex-1 text-center">
+                    <span className="text-gray-400 text-[10px] sm:text-xs">{d.label.slice(0, 3)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Filters */}
@@ -685,3 +875,4 @@ export default function SalesHistory() {
     </div>
   );
 }
+
