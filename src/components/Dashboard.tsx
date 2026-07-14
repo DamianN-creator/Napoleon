@@ -12,9 +12,18 @@ import {
   Navigation,
 } from 'lucide-react';
 import { orderStatusColors, orderStatusLabels } from '../data/initialData';
+import { computeAllCustomerStats } from '../utils/customerStats';
 
 export default function Dashboard() {
-  const { orders, products, customers } = useApp();
+  const { orders, completedOrders, products, customers } = useApp();
+  const topCustomerStats = useMemo(() => {
+    const allOrders = [...orders, ...completedOrders];
+    const statsMap = computeAllCustomerStats(customers, allOrders);
+    return [...customers]
+      .map(c => ({ customer: c, stats: statsMap.get(c.id)! }))
+      .sort((a, b) => b.stats.totalSpent - a.stats.totalSpent)
+      .slice(0, 5);
+  }, [customers, orders, completedOrders]);
 
   const todayStats = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -247,18 +256,15 @@ export default function Dashboard() {
                 Top Clientes
               </h2>
               <div className="space-y-2">
-                {customers
-                  .sort((a, b) => b.totalSpent - a.totalSpent)
-                  .slice(0, 5)
-                  .map((customer, idx) => (
-                    <div key={customer.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500 text-sm">{idx + 1}.</span>
-                        <span className="text-white text-sm">{customer.name}</span>
-                      </div>
-                      <span className="text-pink-400 text-sm font-medium">${customer.totalSpent.toLocaleString()}</span>
+                {topCustomerStats.map(({ customer, stats }, idx) => (
+                  <div key={customer.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 text-sm">{idx + 1}.</span>
+                      <span className="text-white text-sm">{customer.name}</span>
                     </div>
-                  ))}
+                    <span className="text-pink-400 text-sm font-medium">${stats.totalSpent.toLocaleString()}</span>
+                  </div>
+                ))}
                 {customers.length === 0 && (
                   <p className="text-gray-500 text-sm text-center py-2">Sin clientes aun</p>
                 )}

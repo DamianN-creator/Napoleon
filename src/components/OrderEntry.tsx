@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, OrderItem, OrderType, PaymentMethod, Customer } from '../types';
 import { initialProducts, categoryLabels, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
+import { computeAllCustomerStats } from '../utils/customerStats';
 import {
   Plus,
   Trash2,
@@ -21,7 +22,15 @@ import {
 } from 'lucide-react';
 
 export default function OrderEntry() {
-  const { products, extras, addOrder, customers, findCustomerByIdentity, addCustomer, updateCustomerStats, updateProduct } = useApp();
+  const { products, extras, addOrder, customers, orders, completedOrders, findCustomerByIdentity, addCustomer, updateProduct } = useApp();
+  // Live-computed per-customer totals — never stored, so they can't drift when orders
+  // get edited, reassigned, or deleted after the fact
+  const customerStatsMap = useMemo(
+    () => computeAllCustomerStats(customers, [...orders, ...completedOrders]),
+    [customers, orders, completedOrders]
+  );
+  const statsFor = (customer: Customer) =>
+    customerStatsMap.get(customer.id) || { totalSpent: 0, orderCount: 0, lastOrderDate: undefined };
 
   // Order state
   const [customerName, setCustomerName] = useState('');
@@ -86,12 +95,14 @@ export default function OrderEntry() {
   // Sort customers by last order date (most recent first)
   const sortedCustomers = useMemo(() => {
     return [...filteredCustomers].sort((a, b) => {
-      if (!a.lastOrderDate && !b.lastOrderDate) return 0;
-      if (!a.lastOrderDate) return 1;
-      if (!b.lastOrderDate) return -1;
-      return new Date(b.lastOrderDate).getTime() - new Date(a.lastOrderDate).getTime();
+      const aDate = statsFor(a).lastOrderDate;
+      const bDate = statsFor(b).lastOrderDate;
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return new Date(bDate).getTime() - new Date(aDate).getTime();
     });
-  }, [filteredCustomers]);
+  }, [filteredCustomers, customerStatsMap]);
 
   const handleCustomerSelect = (customer: Customer) => {
     setCustomerName(customer.name);
@@ -550,14 +561,14 @@ export default function OrderEntry() {
                             </div>
                             <div className="text-right">
                               <p className="text-green-400 font-medium text-sm">
-                                ${customer.totalSpent.toLocaleString()}
+                                ${statsFor(customer).totalSpent.toLocaleString()}
                               </p>
                               <p className="text-gray-500 text-xs flex items-center gap-1">
                                 <History className="w-3 h-3" />
-                                {customer.orderCount} pedidos
+                                {statsFor(customer).orderCount} pedidos
                               </p>
-                              {customer.lastOrderDate && (
-                                <p className="text-gray-600 text-xs">{formatLastOrder(customer.lastOrderDate)}</p>
+                              {statsFor(customer).lastOrderDate && (
+                                <p className="text-gray-600 text-xs">{formatLastOrder(statsFor(customer).lastOrderDate)}</p>
                               )}
                             </div>
                           </button>

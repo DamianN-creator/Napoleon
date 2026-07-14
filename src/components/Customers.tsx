@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Customer, Order, CompletedOrder } from '../types';
 import { orderStatusColors, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
+import { computeAllCustomerStats, getCustomerOrders as getCustomerOrdersFor } from '../utils/customerStats';
 import {
   Users,
   Search,
@@ -16,7 +17,6 @@ import {
   Edit2,
   Trash2,
   Download,
-  RefreshCw,
   X,
 } from 'lucide-react';
 
@@ -24,6 +24,11 @@ type CustomerOrder = Order | CompletedOrder;
 
 export default function Customers() {
   const { customers, orders, completedOrders, addCustomer, updateCustomer, deleteCustomer } = useApp();
+  const allOrders = useMemo(() => [...orders, ...completedOrders], [orders, completedOrders]);
+  // Live-computed per-customer totals — never stored, so they can't drift when orders
+  // get edited, reassigned, or deleted after the fact
+  const statsMap = useMemo(() => computeAllCustomerStats(customers, allOrders), [customers, allOrders]);
+  const statsFor = (customer: Customer) => statsMap.get(customer.id) || { totalSpent: 0, orderCount: 0, lastOrderDate: undefined };
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'spent' | 'orders'>('spent');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -47,13 +52,13 @@ export default function Customers() {
     if (sortBy === 'name') {
       result.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sortBy === 'spent') {
-      result.sort((a, b) => b.totalSpent - a.totalSpent);
+      result.sort((a, b) => statsFor(b).totalSpent - statsFor(a).totalSpent);
     } else if (sortBy === 'orders') {
-      result.sort((a, b) => b.orderCount - a.orderCount);
+      result.sort((a, b) => statsFor(b).orderCount - statsFor(a).orderCount);
     }
 
     return result;
-  }, [customers, searchTerm, sortBy]);
+  }, [customers, searchTerm, sortBy, statsMap]);
 
   const closeModal = () => {
     setShowAddModal(false);
@@ -67,7 +72,7 @@ export default function Customers() {
   };
 
   const handleDeleteCustomer = (customer: Customer) => {
-    const linkedOrders = getCustomerOrders(customer.id);
+    const linkedOrders = getCustomerOrdersFor(customer, allOrders);
     const linkedTotal = linkedOrders.reduce((sum, o) => sum + o.total, 0);
     const impactMsg = linkedOrders.length > 0
       ? `\n\nOJO: esto tambien va a borrar del Historial de Ventas ${linkedOrders.length} pedido(s) por un total de $${linkedTotal.toLocaleString()}, de forma permanente. Si "${customer.name}" es un nombre generico compartido (ej. Pedidos Ya, Cliente 1), se van a borrar TODAS las ventas registradas con ese nombre, no solo una.`
@@ -104,64 +109,10 @@ export default function Customers() {
     closeModal();
   };
 
-  // Phone is the identity key when present; a blank phone falls back to exact name so
-  // distinctly-named customers (or intentional shared buckets like "Pedidos Ya") don't
-  // get merged with whoever else also lacks a phone
-  const matchesCustomer = (order: CustomerOrder, phone: string, name: string) =>
-    phone ? order.customerPhone === phone : order.customerName.trim().toLowerCase() === name;
-
   const getCustomerOrders = (customerId: string): CustomerOrder[] => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return [];
-    // Also match by recorded order id — orderHistory keeps the link even if the
-    // customer's phone/name gets edited later, which would otherwise orphan past orders
-    const phone = customer.phone.trim();
-    const name = customer.name.trim().toLowerCase();
-    const historyIds = new Set(customer.orderHistory);
-    const seen = new Set<string>();
-    const result: CustomerOrder[] = [];
-    [...orders, ...completedOrders].forEach(o => {
-      if ((matchesCustomer(o, phone, name) || historyIds.has(o.id)) && !seen.has(o.id)) {
-        seen.add(o.id);
-        result.push(o);
-      }
-    });
-    return result;
-  };
-
-  // Recompute a customer's stats from the orders that genuinely belong to them,
-  // undoing any bad linkage from the blank-phone matching bug
-  const recalculateCustomerStats = (customer: Customer) => {
-    const phone = customer.phone.trim();
-    const name = customer.name.trim().toLowerCase();
-    const genuineOrders = [...orders, ...completedOrders].filter(
-      o => matchesCustomer(o, phone, name) && o.status === 'rendido'
-    );
-    const uniqueOrders = Array.from(new Map(genuineOrders.map(o => [o.id, o])).values());
-    const newOrderCount = uniqueOrders.length;
-    const newTotalSpent = uniqueOrders.reduce((sum, o) => sum + o.total, 0);
-    const newLastOrderDate = uniqueOrders.length > 0
-      ? new Date(Math.max(...uniqueOrders.map(o => new Date(o.createdAt).getTime())))
-      : undefined;
-
-    const matchDesc = phone ? `el telefono ${customer.phone}` : `el nombre "${customer.name}"`;
-    const confirmMsg =
-      `Recalcular estadisticas de "${customer.name}" segun los pedidos que realmente tienen ${matchDesc}:\n\n` +
-      `Pedidos: ${customer.orderCount} -> ${newOrderCount}\n` +
-      `Total gastado: $${customer.totalSpent.toLocaleString()} -> $${newTotalSpent.toLocaleString()}\n\n` +
-      `Esto no modifica los pedidos en si, solo las estadisticas guardadas en la ficha del cliente. Continuar?`;
-
-    if (!confirm(confirmMsg)) return;
-
-    const updated: Customer = {
-      ...customer,
-      orderCount: newOrderCount,
-      totalSpent: newTotalSpent,
-      orderHistory: uniqueOrders.map(o => o.id),
-      lastOrderDate: newLastOrderDate,
-    };
-    updateCustomer(updated);
-    setShowDetail(updated);
+    return getCustomerOrdersFor(customer, allOrders);
   };
 
   const formatDate = (date: Date | string) => {
@@ -213,8 +164,8 @@ export default function Customers() {
 
   // Top customers
   const topCustomers = useMemo(() => {
-    return [...customers].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
-  }, [customers]);
+    return [...customers].sort((a, b) => statsFor(b).totalSpent - statsFor(a).totalSpent).slice(0, 5);
+  }, [customers, statsMap]);
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 md:p-6">
@@ -322,8 +273,8 @@ export default function Customers() {
                     {idx + 1}
                   </div>
                   <p className="text-white font-medium text-sm truncate">{customer.name}</p>
-                  <p className="text-pink-400 font-bold">${customer.totalSpent.toLocaleString()}</p>
-                  <p className="text-gray-400 text-xs">{customer.orderCount} pedidos</p>
+                  <p className="text-pink-400 font-bold">${statsFor(customer).totalSpent.toLocaleString()}</p>
+                  <p className="text-gray-400 text-xs">{statsFor(customer).orderCount} pedidos</p>
                 </div>
               ))}
             </div>
@@ -371,18 +322,18 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gray-750 rounded-lg p-2 text-center">
                   <p className="text-gray-400 text-xs">Total Gastado</p>
-                  <p className="text-green-400 font-bold">${customer.totalSpent.toLocaleString()}</p>
+                  <p className="text-green-400 font-bold">${statsFor(customer).totalSpent.toLocaleString()}</p>
                 </div>
                 <div className="bg-gray-750 rounded-lg p-2 text-center">
                   <p className="text-gray-400 text-xs">Pedidos</p>
-                  <p className="text-cyan-400 font-bold">{customer.orderCount}</p>
+                  <p className="text-cyan-400 font-bold">{statsFor(customer).orderCount}</p>
                 </div>
               </div>
 
-              {customer.lastOrderDate && (
+              {statsFor(customer).lastOrderDate && (
                 <p className="text-gray-500 text-xs mt-3 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  Ultimo pedido: {formatDate(customer.lastOrderDate)}
+                  Ultimo pedido: {formatDate(statsFor(customer).lastOrderDate!)}
                 </p>
               )}
             </div>
@@ -491,13 +442,6 @@ export default function Customers() {
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => recalculateCustomerStats(showDetail)}
-                    className="text-white/80 hover:text-white"
-                    title="Recalcular estadisticas segun los pedidos reales"
-                  >
-                    <RefreshCw className="w-5 h-5" />
-                  </button>
-                  <button
                     onClick={() => { openEditModal(showDetail); setShowDetail(null); }}
                     className="text-white/80 hover:text-white"
                     title="Editar cliente"
@@ -527,18 +471,18 @@ export default function Customers() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-gray-750 rounded-xl p-4 text-center">
                   <TrendingUp className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-white">${showDetail.totalSpent.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-white">${statsFor(showDetail).totalSpent.toLocaleString()}</p>
                   <p className="text-gray-400 text-sm">Total Gastado</p>
                 </div>
                 <div className="bg-gray-750 rounded-xl p-4 text-center">
                   <ShoppingBag className="w-8 h-8 text-cyan-400 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-white">{showDetail.orderCount}</p>
+                  <p className="text-2xl font-bold text-white">{statsFor(showDetail).orderCount}</p>
                   <p className="text-gray-400 text-sm">Pedidos</p>
                 </div>
                 <div className="bg-gray-750 rounded-xl p-4 text-center">
                   <Star className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
                   <p className="text-2xl font-bold text-white">
-                    {showDetail.orderCount > 0 ? Math.round(showDetail.totalSpent / showDetail.orderCount) : 0}
+                    {statsFor(showDetail).orderCount > 0 ? Math.round(statsFor(showDetail).totalSpent / statsFor(showDetail).orderCount) : 0}
                   </p>
                   <p className="text-gray-400 text-sm">Ticket Prom.</p>
                 </div>
@@ -553,7 +497,7 @@ export default function Customers() {
               )}
 
               {/* Last Order */}
-              {showDetail.lastOrderDate && (
+              {statsFor(showDetail).lastOrderDate && (
                 <div className="bg-gray-750 rounded-lg p-4 flex items-center gap-3">
                   <Calendar className="w-5 h-5 text-cyan-400" />
                   <span className="text-white">Cliente desde {formatDate(showDetail.createdAt)}</span>

@@ -41,7 +41,6 @@ interface AppContextType extends AppState {
   updateCustomer: (customer: Customer) => void;
   deleteCustomer: (customerId: string) => void;
   findCustomerByIdentity: (name: string, phone: string) => Customer | undefined;
-  updateCustomerStats: (customerId: string, orderTotal: number, orderId: string) => void;
 
   // Cadetes
   addCadete: (cadete: Cadete) => void;
@@ -152,7 +151,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ));
   }, [setOrders, setCadetes]);
 
-  // Customers (defined before rendirOrder which depends on updateCustomerStats)
+  // Customers
   const addCustomer = useCallback((customer: Customer) => {
     setCustomers(prev => [...prev, customer]);
   }, [setCustomers]);
@@ -206,21 +205,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const normalizedName = name.trim().toLowerCase();
     return customers.find(c => c.name.trim().toLowerCase() === normalizedName);
   }, [customers]);
-
-  const updateCustomerStats = useCallback((customerId: string, orderTotal: number, orderId: string) => {
-    setCustomers(prev => prev.map(c => {
-      if (c.id === customerId) {
-        return {
-          ...c,
-          totalSpent: c.totalSpent + orderTotal,
-          orderCount: c.orderCount + 1,
-          lastOrderDate: new Date(),
-          orderHistory: [...c.orderHistory, orderId],
-        };
-      }
-      return c;
-    }));
-  }, [setCustomers]);
 
   // Stock
   const addRawMaterial = useCallback((material: RawMaterial) => {
@@ -380,14 +364,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       setStockMovements(prev => [...prev, ...newMovements]);
     }
-
-    // Update customer stats — match by phone when present, otherwise by exact name
-    // (a blank phone must never match another customer's blank phone)
-    const customer = findCustomerByIdentity(order.customerName, order.customerPhone);
-    if (customer) {
-      updateCustomerStats(customer.id, order.total, order.id);
-    }
-  }, [orders, products, rawMaterials, subProducts, setOrders, setCadetes, setRawMaterials, setStockMovements, updateCustomerStats, findCustomerByIdentity]);
+    // Customer totals (totalSpent/orderCount) are no longer accumulated here — they're
+    // computed live from orders wherever they're displayed, so they can't drift.
+  }, [orders, products, rawMaterials, subProducts, setOrders, setCadetes, setRawMaterials, setStockMovements]);
 
   // Cadetes
   const addCadete = useCallback((cadete: Cadete) => {
@@ -657,7 +636,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCustomer,
     deleteCustomer,
     findCustomerByIdentity,
-    updateCustomerStats,
     addCadete,
     updateCadete,
     deleteCadete,
@@ -710,7 +688,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCustomer,
     deleteCustomer,
     findCustomerByIdentity,
-    updateCustomerStats,
     addCadete,
     updateCadete,
     deleteCadete,
