@@ -29,6 +29,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { CashShiftMovementType, ExpenseCategory } from '../types';
+import { expenseCategoryLabels as EXPENSE_CATEGORY_LABELS } from '../data/initialData';
 
 type Tab = 'turno' | 'historial';
 
@@ -48,15 +49,17 @@ const MOVEMENT_META: Record<CashShiftMovementType, {
   ingreso: { label: 'Ingreso', sign: '+', Icon: ArrowUpCircle, rowBg: 'bg-teal-500/5', text: 'text-teal-400', activeBg: 'bg-teal-500 text-white', placeholder: 'Ej: Propina adicional' },
 };
 
-const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
-  insumos: 'Insumos',
-  personal: 'Personal',
-  servicios: 'Servicios',
-};
+// One-off rule set to categorize gastos loaded before the category field existed —
+// matches by keyword (case-insensitive, substring) against the expense description
+const LEGACY_EXPENSE_CATEGORY_RULES: { category: ExpenseCategory; keywords: string[] }[] = [
+  { category: 'personal', keywords: ['Uke', 'Uke 50000', 'Pablo', 'Cadete'] },
+  { category: 'insumos', keywords: ['MuzzA'] },
+];
 
 export default function CashClosing() {
   const {
     orders, cashShifts, openCashShift, closeCashShift, addCashMovement, getActiveCashShift, deleteCashShift,
+    bulkCategorizeExpenses,
   } = useApp();
   const { isSuperAdmin } = useAuth();
 
@@ -200,6 +203,15 @@ export default function CashClosing() {
     if (selectedShift?.id === shift.id) setSelectedShift(null);
   };
 
+  const handleCategorizeLegacyExpenses = () => {
+    const rulesDesc = LEGACY_EXPENSE_CATEGORY_RULES
+      .map(r => `${EXPENSE_CATEGORY_LABELS[r.category]}: ${r.keywords.join(', ')}`)
+      .join('\n');
+    if (!confirm(`Categorizar gastos existentes segun:\n\n${rulesDesc}\n\nSolo se van a completar los gastos que todavia no tienen categoria. Continuar?`)) return;
+    const updatedCount = bulkCategorizeExpenses(LEGACY_EXPENSE_CATEGORY_RULES);
+    alert(updatedCount > 0 ? `Se categorizaron ${updatedCount} gasto(s).` : 'No se encontraron gastos sin categoria que coincidan con esas palabras.');
+  };
+
   const handleExport = () => {
     if (!activeShift) return;
     const lines = [
@@ -246,14 +258,25 @@ export default function CashClosing() {
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <DollarSign className="w-8 h-8 text-green-400" />
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white">Caja</h1>
-            <p className="text-gray-400 text-sm">
-              {activeShift ? 'Turno en curso' : 'Sin turno activo'}
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <DollarSign className="w-8 h-8 text-green-400" />
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">Caja</h1>
+              <p className="text-gray-400 text-sm">
+                {activeShift ? 'Turno en curso' : 'Sin turno activo'}
+              </p>
+            </div>
           </div>
+          {isSuperAdmin && (
+            <button
+              onClick={handleCategorizeLegacyExpenses}
+              className="text-gray-400 hover:text-white text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-lg font-medium"
+              title="Completa la categoria de los gastos ya cargados que todavia no tienen una"
+            >
+              Categorizar gastos existentes
+            </button>
+          )}
         </div>
 
         {/* Tabs */}

@@ -328,3 +328,9 @@ export const categoryLabels: Record<string, string> = {
   postres: 'Postres',
   promociones: 'Promociones',
 };
+
+export const expenseCategoryLabels: Record<string, string> = {
+  insumos: 'Insumos',
+  personal: 'Personal',
+  servicios: 'Servicios',
+};

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { CashShift, CashShiftMovement, Order, CompletedOrder, PaymentMethod } from '../types';
-import { paymentMethodLabels, orderTypeLabels } from '../data/initialData';
+import { CashShift, CashShiftMovement, ExpenseCategory, Order, CompletedOrder, PaymentMethod } from '../types';
+import { paymentMethodLabels, orderTypeLabels, expenseCategoryLabels } from '../data/initialData';
 import {
   TrendingUp,
   TrendingDown,
@@ -19,6 +19,10 @@ import {
   QrCode,
   X,
   ArrowDownCircle,
+  Package,
+  Users,
+  Wrench,
+  HelpCircle,
 } from 'lucide-react';
 
 type HistoryOrder = Order | CompletedOrder;
@@ -60,24 +64,37 @@ interface CategorizedOrder {
   order: HistoryOrder;
 }
 
-interface GastoGroup {
-  description: string;
+// Gastos sin categoria (cargados antes de que existiera el campo, o no coincidieron con
+// ninguna regla de "Categorizar gastos existentes") se agrupan aparte, al final
+type GastoCategoryKey = ExpenseCategory | 'sin_categoria';
+
+interface GastoCategoryGroup {
+  category: GastoCategoryKey;
   total: number;
   count: number;
 }
 
-const groupGastos = (movements: CashShiftMovement[]): GastoGroup[] => {
-  const map = new Map<string, { total: number; count: number }>();
+const GASTO_CATEGORY_ORDER: GastoCategoryKey[] = ['insumos', 'personal', 'servicios', 'sin_categoria'];
+
+const GASTO_CATEGORY_META: Record<GastoCategoryKey, { label: string; Icon: typeof Package; color: string }> = {
+  insumos: { label: expenseCategoryLabels.insumos, Icon: Package, color: 'text-orange-400' },
+  personal: { label: expenseCategoryLabels.personal, Icon: Users, color: 'text-fuchsia-400' },
+  servicios: { label: expenseCategoryLabels.servicios, Icon: Wrench, color: 'text-indigo-400' },
+  sin_categoria: { label: 'Sin categoria', Icon: HelpCircle, color: 'text-gray-400' },
+};
+
+const groupGastosByCategory = (movements: CashShiftMovement[]): GastoCategoryGroup[] => {
+  const map = new Map<GastoCategoryKey, { total: number; count: number }>();
   movements.forEach(m => {
-    const key = m.description.trim() || '(sin descripcion)';
+    const key: GastoCategoryKey = m.category || 'sin_categoria';
     const existing = map.get(key) || { total: 0, count: 0 };
     existing.total += m.amount;
     existing.count += 1;
     map.set(key, existing);
   });
-  return Array.from(map.entries())
-    .map(([description, v]) => ({ description, total: v.total, count: v.count }))
-    .sort((a, b) => b.total - a.total);
+  return GASTO_CATEGORY_ORDER
+    .filter(key => map.has(key))
+    .map(key => ({ category: key, ...map.get(key)! }));
 };
 
 interface ShiftResult {
@@ -88,7 +105,7 @@ interface ShiftResult {
   categorizedOrders: CategorizedOrder[];
   egresos: number;
   gastoMovements: CashShiftMovement[];
-  gastoGroups: GastoGroup[];
+  gastoCategoryGroups: GastoCategoryGroup[];
   resultado: number;
 }
 
@@ -130,7 +147,7 @@ export default function ResultsReport() {
       const ventas = shiftOrders.reduce((sum, o) => sum + o.total, 0);
       const resultado = ventas - egresos;
 
-      return { shift, date, ventas, ventasBreakdown, categorizedOrders, egresos, gastoMovements, gastoGroups: groupGastos(gastoMovements), resultado };
+      return { shift, date, ventas, ventasBreakdown, categorizedOrders, egresos, gastoMovements, gastoCategoryGroups: groupGastosByCategory(gastoMovements), resultado };
     });
   }, [cashShifts, orders, completedOrders]);
 
@@ -156,8 +173,8 @@ export default function ResultsReport() {
     );
   }, [filteredResults]);
 
-  const totalGastoGroups = useMemo(() => {
-    return groupGastos(filteredResults.flatMap(r => r.gastoMovements));
+  const totalGastoCategoryGroups = useMemo(() => {
+    return groupGastosByCategory(filteredResults.flatMap(r => r.gastoMovements));
   }, [filteredResults]);
 
   const formatDate = (date: string) => {
@@ -219,13 +236,13 @@ export default function ResultsReport() {
     setDetailModal({ kind: 'sales', label: SALES_CATEGORY_LABELS[category], entries });
   };
 
-  const openGastoDetail = (results: ShiftResult[], description: string) => {
+  const openGastoCategoryDetail = (results: ShiftResult[], category: GastoCategoryKey) => {
     const entries = results.flatMap(r =>
       r.gastoMovements
-        .filter(m => (m.description.trim() || '(sin descripcion)') === description)
+        .filter(m => (m.category || 'sin_categoria') === category)
         .map(m => ({ movement: m, shiftDate: r.date }))
     ).sort((a, b) => new Date(b.movement.createdAt).getTime() - new Date(a.movement.createdAt).getTime());
-    setDetailModal({ kind: 'gasto', label: description, entries });
+    setDetailModal({ kind: 'gasto', label: GASTO_CATEGORY_META[category].label, entries });
   };
 
   const SalesBreakdownList = ({ breakdown, onSelect }: { breakdown: SalesBreakdown; onSelect: (category: SalesCategory) => void }) => (
@@ -266,24 +283,28 @@ export default function ResultsReport() {
     </div>
   );
 
-  const GastoGroupList = ({ groups, onSelect }: { groups: GastoGroup[]; onSelect: (description: string) => void }) => (
+  const GastoCategoryGroupList = ({ groups, onSelect }: { groups: GastoCategoryGroup[]; onSelect: (category: GastoCategoryKey) => void }) => (
     <div className="space-y-2">
-      {groups.map(g => (
-        <button
-          key={g.description}
-          onClick={() => onSelect(g.description)}
-          className="w-full flex items-center justify-between text-sm py-1.5 px-3 bg-gray-750 hover:bg-gray-700 rounded-lg transition-colors text-left"
-        >
-          <span className="text-gray-400">
-            {g.description}
-            {g.count > 1 && <span className="text-gray-500"> (x{g.count})</span>}
-          </span>
-          <span className="text-red-300 font-medium flex items-center gap-1">
-            -${g.total.toLocaleString()}
-            <ChevronRight className="w-4 h-4 text-gray-500" />
-          </span>
-        </button>
-      ))}
+      {groups.map(g => {
+        const meta = GASTO_CATEGORY_META[g.category];
+        return (
+          <button
+            key={g.category}
+            onClick={() => onSelect(g.category)}
+            className="w-full flex items-center justify-between text-sm py-1.5 px-3 bg-gray-750 hover:bg-gray-700 rounded-lg transition-colors text-left"
+          >
+            <span className="text-gray-400 flex items-center gap-2">
+              <meta.Icon className={`w-4 h-4 ${meta.color}`} />
+              {meta.label}
+              <span className="text-gray-500">({g.count})</span>
+            </span>
+            <span className="text-red-300 font-medium flex items-center gap-1">
+              -${g.total.toLocaleString()}
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -372,8 +393,8 @@ export default function ResultsReport() {
               </div>
               <span className="text-2xl font-bold text-red-400">${totals.egresos.toLocaleString()}</span>
             </div>
-            {totalGastoGroups.length > 0 ? (
-              <GastoGroupList groups={totalGastoGroups} onSelect={description => openGastoDetail(filteredResults, description)} />
+            {totalGastoCategoryGroups.length > 0 ? (
+              <GastoCategoryGroupList groups={totalGastoCategoryGroups} onSelect={category => openGastoCategoryDetail(filteredResults, category)} />
             ) : (
               <p className="text-gray-500 text-sm">Sin gastos registrados</p>
             )}
@@ -442,8 +463,8 @@ export default function ResultsReport() {
                     </div>
                     <div>
                       <p className="text-gray-400 text-xs font-medium mb-2">Gastos — ${r.egresos.toLocaleString()}</p>
-                      {r.gastoGroups.length > 0 ? (
-                        <GastoGroupList groups={r.gastoGroups} onSelect={description => openGastoDetail([r], description)} />
+                      {r.gastoCategoryGroups.length > 0 ? (
+                        <GastoCategoryGroupList groups={r.gastoCategoryGroups} onSelect={category => openGastoCategoryDetail([r], category)} />
                       ) : (
                         <p className="text-gray-500 text-sm">Sin gastos registrados</p>
                       )}

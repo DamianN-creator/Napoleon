@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { useSupabaseTable, useSupabaseValue } from '../hooks/useSupabaseTable';
 import { useAuth } from './AuthContext';
-import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, CompletedOrder, AppState, RawMaterial, StockMovement, SubProduct, Extra } from '../types';
+import { Product, Order, Customer, Cadete, DailyReport, CashShift, CashShiftMovement, ExpenseCategory, CompletedOrder, AppState, RawMaterial, StockMovement, SubProduct, Extra } from '../types';
 import { initialProducts, initialExtras } from '../data/initialData';
 
 interface AppContextType extends AppState {
@@ -56,6 +56,7 @@ interface AppContextType extends AppState {
   getActiveCashShift: () => CashShift | undefined;
   clearCurrentSessionData: () => void;
   deleteCashShift: (shiftId: string) => void;
+  bulkCategorizeExpenses: (rules: { category: ExpenseCategory; keywords: string[] }[]) => number;
 
   // Reports
   generateDailyReport: () => DailyReport;
@@ -541,6 +542,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [cashShifts, completedOrders, stockMovements, setCashShifts, setCompletedOrders, setRawMaterials, setStockMovements]);
 
+  // One-off cleanup for gastos loaded before the category field existed: matches by
+  // keyword against the description and fills in the category, without touching
+  // movements that already have one. Returns how many were updated.
+  const bulkCategorizeExpenses = useCallback((rules: { category: ExpenseCategory; keywords: string[] }[]): number => {
+    const matchRule = (description: string): ExpenseCategory | undefined => {
+      const descLower = description.toLowerCase();
+      return rules.find(r => r.keywords.some(k => descLower.includes(k.toLowerCase())))?.category;
+    };
+
+    const matchCount = cashShifts.reduce(
+      (count, shift) => count + shift.movements.filter(m => m.type === 'gasto' && !m.category && matchRule(m.description)).length,
+      0
+    );
+
+    if (matchCount > 0) {
+      setCashShifts(prev => prev.map(shift => ({
+        ...shift,
+        movements: shift.movements.map(m => {
+          if (m.type !== 'gasto' || m.category) return m;
+          const category = matchRule(m.description);
+          return category ? { ...m, category } : m;
+        }),
+      })));
+    }
+
+    return matchCount;
+  }, [cashShifts, setCashShifts]);
+
   const addCashMovement = useCallback((movement: Omit<CashShiftMovement, 'id' | 'createdAt'>) => {
     const fullMovement: CashShiftMovement = {
       ...movement,
@@ -676,6 +705,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getActiveCashShift,
     clearCurrentSessionData,
     deleteCashShift,
+    bulkCategorizeExpenses,
     generateDailyReport,
     getDailyReport,
     getNextOrderNumber,
@@ -729,6 +759,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getActiveCashShift,
     clearCurrentSessionData,
     deleteCashShift,
+    bulkCategorizeExpenses,
     generateDailyReport,
     getDailyReport,
     getNextOrderNumber,
