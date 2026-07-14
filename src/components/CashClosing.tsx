@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { CashShift } from '../types';
 import {
   DollarSign,
@@ -25,8 +26,9 @@ import {
   ShoppingBag,
   AlertCircle,
   ChevronLeft,
+  Trash2,
 } from 'lucide-react';
-import { CashShiftMovementType } from '../types';
+import { CashShiftMovementType, ExpenseCategory } from '../types';
 
 type Tab = 'turno' | 'historial';
 
@@ -46,10 +48,17 @@ const MOVEMENT_META: Record<CashShiftMovementType, {
   ingreso: { label: 'Ingreso', sign: '+', Icon: ArrowUpCircle, rowBg: 'bg-teal-500/5', text: 'text-teal-400', activeBg: 'bg-teal-500 text-white', placeholder: 'Ej: Propina adicional' },
 };
 
+const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  insumos: 'Insumos',
+  personal: 'Personal',
+  servicios: 'Servicios',
+};
+
 export default function CashClosing() {
   const {
-    orders, cashShifts, openCashShift, closeCashShift, addCashMovement, getActiveCashShift,
+    orders, cashShifts, openCashShift, closeCashShift, addCashMovement, getActiveCashShift, deleteCashShift,
   } = useApp();
+  const { isSuperAdmin } = useAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>('turno');
   const [selectedShift, setSelectedShift] = useState<CashShift | null>(null);
@@ -65,6 +74,7 @@ export default function CashClosing() {
   const activeMovementMeta = MOVEMENT_META[movementType];
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | null>(null);
 
   // Arqueo modal
   const [showArqueoModal, setShowArqueoModal] = useState(false);
@@ -157,9 +167,16 @@ export default function CashClosing() {
   const handleAddMovement = () => {
     const amount = Number(movementAmount);
     if (isNaN(amount) || amount <= 0 || !movementDescription.trim()) return;
-    addCashMovement({ type: movementType, amount, description: movementDescription.trim() });
+    if (movementType === 'gasto' && !expenseCategory) return;
+    addCashMovement({
+      type: movementType,
+      amount,
+      description: movementDescription.trim(),
+      category: movementType === 'gasto' ? expenseCategory! : undefined,
+    });
     setMovementAmount('');
     setMovementDescription('');
+    setExpenseCategory(null);
     setShowMovementModal(false);
   };
 
@@ -171,6 +188,16 @@ export default function CashClosing() {
     setArqueoCountedCash('');
     setArqueoNotes('');
     setShowArqueoModal(false);
+  };
+
+  const handleDeleteShift = (shift: CashShift) => {
+    const ss = shift.salesSummary;
+    const impactMsg = ss
+      ? `\n\nSe van a borrar ${ss.deliveredCount} pedido(s) de ese turno del Historial de Ventas, por un total de $${ss.totalSales.toLocaleString()}.`
+      : '';
+    if (!confirm(`Eliminar la caja del ${formatDateLong(shift.openedAt)}? Esta accion no se puede deshacer.${impactMsg}`)) return;
+    deleteCashShift(shift.id);
+    if (selectedShift?.id === shift.id) setSelectedShift(null);
   };
 
   const handleExport = () => {
@@ -297,21 +324,21 @@ export default function CashClosing() {
 
                     <div className="flex gap-2 flex-wrap">
                       <button
-                        onClick={() => { setMovementType('gasto'); setShowMovementModal(true); }}
+                        onClick={() => { setMovementType('gasto'); setExpenseCategory(null); setShowMovementModal(true); }}
                         className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 border border-white/30"
                       >
                         <ArrowDownCircle className="w-4 h-4" />
                         Gasto
                       </button>
                       <button
-                        onClick={() => { setMovementType('retiro'); setShowMovementModal(true); }}
+                        onClick={() => { setMovementType('retiro'); setExpenseCategory(null); setShowMovementModal(true); }}
                         className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 border border-white/30"
                       >
                         <ArrowDownCircle className="w-4 h-4" />
                         Retiro
                       </button>
                       <button
-                        onClick={() => { setMovementType('ingreso'); setShowMovementModal(true); }}
+                        onClick={() => { setMovementType('ingreso'); setExpenseCategory(null); setShowMovementModal(true); }}
                         className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 border border-white/30"
                       >
                         <ArrowUpCircle className="w-4 h-4" />
@@ -486,6 +513,11 @@ export default function CashClosing() {
                             <div className="flex items-center gap-2">
                               <meta.Icon className={`w-4 h-4 ${meta.text}`} />
                               <span className="text-white">{m.description}</span>
+                              {m.category && (
+                                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">
+                                  {EXPENSE_CATEGORY_LABELS[m.category]}
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="text-gray-500 text-xs">{formatTime(m.createdAt)}</span>
@@ -529,6 +561,8 @@ export default function CashClosing() {
               <ShiftDetail
                 shift={selectedShift}
                 onBack={() => setSelectedShift(null)}
+                onDelete={() => handleDeleteShift(selectedShift)}
+                isSuperAdmin={isSuperAdmin}
                 formatDate={formatDate}
                 formatDateLong={formatDateLong}
                 formatTime={formatTime}
@@ -585,10 +619,13 @@ export default function CashClosing() {
                       const extraIncome = shift.movements.filter(m => m.type === 'ingreso').reduce((s, m) => s + m.amount, 0);
 
                       return (
-                        <button
+                        <div
                           key={shift.id}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setSelectedShift(shift)}
-                          className="w-full bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-cyan-500/50 rounded-xl p-5 text-left transition-all group"
+                          onKeyDown={e => { if (e.key === 'Enter') setSelectedShift(shift); }}
+                          className="w-full bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-cyan-500/50 rounded-xl p-5 text-left transition-all group cursor-pointer"
                         >
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div className="flex items-center gap-4">
@@ -605,7 +642,7 @@ export default function CashClosing() {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-6 sm:text-right">
+                            <div className="flex items-center gap-4 sm:text-right">
                               {ss && (
                                 <div>
                                   <p className="text-gray-400 text-xs">Ventas totales</p>
@@ -630,9 +667,18 @@ export default function CashClosing() {
                                   </p>
                                 </div>
                               )}
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDeleteShift(shift); }}
+                                  className="text-gray-500 hover:text-red-400 p-1"
+                                  title="Eliminar caja"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              )}
                             </div>
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -708,7 +754,7 @@ export default function CashClosing() {
                 return (
                   <button
                     key={type}
-                    onClick={() => setMovementType(type)}
+                    onClick={() => { setMovementType(type); setExpenseCategory(null); }}
                     className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
                       movementType === type
                         ? meta.activeBg
@@ -726,6 +772,27 @@ export default function CashClosing() {
               <p className="text-purple-300/80 text-xs bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 mb-4">
                 Los retiros descuentan el efectivo de caja pero no se consideran un gasto en el Informe de Resultado.
               </p>
+            )}
+
+            {movementType === 'gasto' && (
+              <div className="mb-4">
+                <label className="block text-gray-400 text-sm mb-1">Categoria *</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[]).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setExpenseCategory(cat)}
+                      className={`py-2 rounded-lg font-medium text-sm transition-colors ${
+                        expenseCategory === cat
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      }`}
+                    >
+                      {EXPENSE_CATEGORY_LABELS[cat]}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             <div className="space-y-4 mb-6">
@@ -762,9 +829,9 @@ export default function CashClosing() {
               </button>
               <button
                 onClick={handleAddMovement}
-                disabled={!movementAmount || Number(movementAmount) <= 0 || !movementDescription.trim()}
+                disabled={!movementAmount || Number(movementAmount) <= 0 || !movementDescription.trim() || (movementType === 'gasto' && !expenseCategory)}
                 className={`flex-1 py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${
-                  movementAmount && Number(movementAmount) > 0 && movementDescription.trim()
+                  movementAmount && Number(movementAmount) > 0 && movementDescription.trim() && (movementType !== 'gasto' || expenseCategory)
                     ? `${MOVEMENT_META[movementType].activeBg} hover:opacity-90`
                     : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 }`}
@@ -908,12 +975,16 @@ export default function CashClosing() {
 function ShiftDetail({
   shift,
   onBack,
+  onDelete,
+  isSuperAdmin,
   formatDate,
   formatDateLong,
   formatTime,
 }: {
   shift: CashShift;
   onBack: () => void;
+  onDelete: () => void;
+  isSuperAdmin: boolean;
   formatDate: (d: Date | string) => string;
   formatDateLong: (d: Date | string) => string;
   formatTime: (d: Date | string) => string;
@@ -926,13 +997,24 @@ function ShiftDetail({
   return (
     <div>
       {/* Back button */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-gray-400 hover:text-white mb-5 transition-colors"
-      >
-        <ChevronLeft className="w-5 h-5" />
-        Volver al historial
-      </button>
+      <div className="flex items-center justify-between mb-5">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          Volver al historial
+        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={onDelete}
+            className="flex items-center gap-2 text-red-400 hover:text-red-300 text-sm font-medium"
+          >
+            <Trash2 className="w-4 h-4" />
+            Eliminar caja
+          </button>
+        )}
+      </div>
 
       {/* Date header */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-4">
@@ -1115,6 +1197,11 @@ function ShiftDetail({
                   <div className="flex items-center gap-2">
                     <meta.Icon className={`w-4 h-4 ${meta.text}`} />
                     <span className="text-white text-sm">{m.description}</span>
+                    {m.category && (
+                      <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">
+                        {EXPENSE_CATEGORY_LABELS[m.category]}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-gray-500 text-xs">{formatTime(m.createdAt)}</span>

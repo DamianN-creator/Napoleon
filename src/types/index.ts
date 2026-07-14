@@ -101,12 +101,15 @@ export interface Customer {
 }
 
 export type CashShiftMovementType = 'gasto' | 'ingreso' | 'retiro';
+export type ExpenseCategory = 'insumos' | 'personal' | 'servicios';
 
 export interface CashShiftMovement {
   id: string;
   type: CashShiftMovementType;
   amount: number;
   description: string;
+  // Only set for type === 'gasto'
+  category?: ExpenseCategory;
   createdAt: Date;
 }
 

@@ -55,6 +55,7 @@ interface AppContextType extends AppState {
   addCashMovement: (movement: Omit<CashShiftMovement, 'id' | 'createdAt'>) => void;
   getActiveCashShift: () => CashShift | undefined;
   clearCurrentSessionData: () => void;
+  deleteCashShift: (shiftId: string) => void;
 
   // Reports
   generateDailyReport: () => DailyReport;
@@ -512,6 +513,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentOrderNumber(1);
   }, [setOrders, setCurrentOrderNumber]);
 
+  const deleteCashShift = useCallback((shiftId: string) => {
+    const shift = cashShifts.find(s => s.id === shiftId);
+    if (!shift || shift.status === 'open') return;
+    setCashShifts(prev => prev.filter(s => s.id !== shiftId));
+
+    // Also purge this shift's archived orders and give back any stock they consumed —
+    // otherwise a deleted (e.g. test) shift leaves orphaned sales/stock behind
+    const removedIds = new Set(completedOrders.filter(o => o.shiftId === shiftId).map(o => o.id));
+    if (removedIds.size === 0) return;
+
+    setCompletedOrders(prev => prev.filter(o => !removedIds.has(o.id)));
+
+    const consumedMovements = stockMovements.filter(
+      m => m.type === 'consumo' && m.orderId && removedIds.has(m.orderId)
+    );
+    if (consumedMovements.length > 0) {
+      const restock: Record<string, number> = {};
+      consumedMovements.forEach(m => {
+        restock[m.rawMaterialId] = (restock[m.rawMaterialId] || 0) + Math.abs(m.quantity);
+      });
+      setRawMaterials(prev => prev.map(rm =>
+        restock[rm.id] !== undefined ? { ...rm, currentStock: rm.currentStock + restock[rm.id] } : rm
+      ));
+      const consumedIds = new Set(consumedMovements.map(m => m.id));
+      setStockMovements(prev => prev.filter(m => !consumedIds.has(m.id)));
+    }
+  }, [cashShifts, completedOrders, stockMovements, setCashShifts, setCompletedOrders, setRawMaterials, setStockMovements]);
+
   const addCashMovement = useCallback((movement: Omit<CashShiftMovement, 'id' | 'createdAt'>) => {
     const fullMovement: CashShiftMovement = {
       ...movement,
@@ -646,6 +675,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addCashMovement,
     getActiveCashShift,
     clearCurrentSessionData,
+    deleteCashShift,
     generateDailyReport,
     getDailyReport,
     getNextOrderNumber,
@@ -698,6 +728,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addCashMovement,
     getActiveCashShift,
     clearCurrentSessionData,
+    deleteCashShift,
     generateDailyReport,
     getDailyReport,
     getNextOrderNumber,
