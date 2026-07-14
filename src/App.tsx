@@ -240,8 +240,17 @@ function AuthGate() {
   );
 }
 
+// Dominios/alias "de marketing" que muestran la tienda directo en la raiz (sin /tienda),
+// para poder compartir un link corto sin tocar el link interno del sistema
+const STORE_HOSTNAMES = (import.meta.env.VITE_STORE_HOSTNAMES ?? '')
+  .split(',')
+  .map((h: string) => h.trim())
+  .filter(Boolean);
+
 function App() {
-  if (window.location.pathname.startsWith('/tienda')) {
+  const isStoreHost = STORE_HOSTNAMES.includes(window.location.hostname);
+
+  if (isStoreHost || window.location.pathname.startsWith('/tienda')) {
     return <OnlineStore />;
   }
 

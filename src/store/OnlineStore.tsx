@@ -31,7 +31,8 @@ export default function OnlineStore() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [orderType, setOrderType] = useState<OrderType>('delivery');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
+  // Temporalmente solo se acepta efectivo; transferencia y tarjeta se vuelven a habilitar mas adelante
+  const paymentMethod: PaymentMethod = 'efectivo';
   const [cashInput, setCashInput] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -325,21 +326,12 @@ export default function OnlineStore() {
 
             <div>
               <label className="text-gray-400 text-sm block mb-1">Pago</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setPaymentMethod('efectivo')}
-                  className={`py-3 rounded-lg font-medium ${paymentMethod === 'efectivo' ? 'bg-yellow-500 text-gray-900' : 'bg-gray-800 text-gray-300 border border-gray-700'}`}
-                >
-                  Efectivo
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('transferencia')}
-                  className={`py-3 rounded-lg font-medium ${paymentMethod === 'transferencia' ? 'bg-yellow-500 text-gray-900' : 'bg-gray-800 text-gray-300 border border-gray-700'}`}
-                >
-                  Transferencia
-                </button>
+              <div className="py-3 px-4 rounded-lg font-medium bg-yellow-500 text-gray-900 text-center">
+                Efectivo
               </div>
-              <p className="text-gray-500 text-xs mt-2">El pago se confirma al recibir o retirar tu pedido.</p>
+              <p className="text-gray-500 text-xs mt-2">
+                Por el momento solo aceptamos efectivo. El pago se confirma al recibir o retirar tu pedido.
+              </p>
             </div>
 
             {paymentMethod === 'efectivo' && (

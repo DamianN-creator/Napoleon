@@ -839,14 +839,12 @@ export default function OrderEntry() {
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        {item.productId.startsWith('pizza') && !item.isHalfHalf && (
-                          <button
-                            onClick={() => openExtrasModal(item)}
-                            className="text-yellow-400 hover:text-yellow-300 text-xs"
-                          >
-                            + Extras
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openExtrasModal(item)}
+                          className="text-yellow-400 hover:text-yellow-300 text-xs"
+                        >
+                          + Extras
+                        </button>
                         <p className="text-green-400 font-bold">${item.subtotal.toLocaleString()}</p>
                       </div>
                     </div>
