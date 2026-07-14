@@ -83,6 +83,9 @@ export interface Order {
   estimatedTime?: number;
   sentAt?: Date;
   rendidoAt?: Date;
+  // Set when a superadmin manually edits createdAt from the history view — tells the
+  // history grouping to use createdAt directly instead of the shift's open date
+  manualDateEdit?: boolean;
 }
 
 export interface Customer {
@@ -148,6 +151,9 @@ export interface CompletedOrder {
   total: number;
   paymentMethod: PaymentMethod;
   status: OrderStatus;
+  // Set when a superadmin manually edits createdAt from the history view — tells the
+  // history grouping to use createdAt directly instead of the shift's open date
+  manualDateEdit?: boolean;
 }
 
 export interface DailyReport {

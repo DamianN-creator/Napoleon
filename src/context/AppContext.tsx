@@ -31,6 +31,7 @@ interface AppContextType extends AppState {
   addOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => Order;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   updateOrder: (order: Order) => void;
+  updateCompletedOrder: (order: CompletedOrder) => void;
   deleteOrder: (orderId: string) => void;
   sendOrder: (orderId: string, cadeteId: string) => void;
   rendirOrder: (orderId: string) => void;
@@ -139,6 +140,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateOrder = useCallback((order: Order) => {
     setOrders(prev => prev.map(o => o.id === order.id ? { ...order, updatedAt: new Date() } : o));
   }, [setOrders]);
+
+  const updateCompletedOrder = useCallback((order: CompletedOrder) => {
+    setCompletedOrders(prev => prev.map(o => o.id === order.id ? order : o));
+  }, [setCompletedOrders]);
 
   const deleteOrder = useCallback((orderId: string) => {
     setOrders(prev => prev.filter(o => o.id !== orderId));
@@ -644,6 +649,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addOrder,
     updateOrderStatus,
     updateOrder,
+    updateCompletedOrder,
     deleteOrder,
     sendOrder,
     rendirOrder,
@@ -696,6 +702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addOrder,
     updateOrderStatus,
     updateOrder,
+    updateCompletedOrder,
     deleteOrder,
     sendOrder,
     rendirOrder,

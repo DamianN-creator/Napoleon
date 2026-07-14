@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Order, CompletedOrder } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { Order, CompletedOrder, OrderType, PaymentMethod } from '../types';
 import { orderStatusColors, orderTypeLabels, paymentMethodLabels } from '../data/initialData';
+import { HistoryOrder, OrderEditForm, buildShiftWindowMap, getActiveShiftWindow, getOrderShiftDate as getOrderShiftDateFor, applyOrderEdit } from '../utils/orderHistory';
 import {
   History,
   Calendar,
@@ -15,12 +17,12 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
+  Pencil,
 } from 'lucide-react';
 
-type HistoryOrder = Order | CompletedOrder;
-
 export default function SalesHistory() {
-  const { orders, completedOrders, cashShifts } = useApp();
+  const { orders, completedOrders, cashShifts, updateOrder, updateCompletedOrder } = useApp();
+  const { isSuperAdmin } = useAuth();
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -29,30 +31,56 @@ export default function SalesHistory() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showOrderDetail, setShowOrderDetail] = useState<HistoryOrder | null>(null);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<OrderEditForm | null>(null);
 
-  // Map shiftId -> shift open date for O(1) lookups
-  const shiftDateMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    cashShifts.forEach(s => {
-      map[s.id] = new Date(s.openedAt).toISOString().split('T')[0];
+  const closeOrderDetail = useCallback(() => {
+    setShowOrderDetail(null);
+    setEditForm(null);
+  }, []);
+
+  const startEditOrder = useCallback((order: HistoryOrder) => {
+    const d = new Date(order.createdAt);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setEditForm({
+      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerAddress: order.customerAddress || '',
+      orderType: order.orderType,
+      paymentMethod: order.paymentMethod,
+      total: order.total,
     });
-    return map;
-  }, [cashShifts]);
+  }, []);
 
-  // Date of the currently active shift (orders after midnight belong to this date)
-  const activeShiftDate = useMemo(() => {
-    const active = cashShifts.find(s => s.status === 'open');
-    return active ? new Date(active.openedAt).toISOString().split('T')[0] : null;
-  }, [cashShifts]);
+  const handleSaveEdit = useCallback(() => {
+    if (!showOrderDetail || !editForm) return;
 
-  // Returns the shift date for an order (not the calendar date of createdAt)
-  const getOrderShiftDate = useCallback((order: HistoryOrder): string => {
-    if ('shiftId' in order && order.shiftId) {
-      return shiftDateMap[order.shiftId] || new Date(order.createdAt).toISOString().split('T')[0];
+    // CompletedOrder (archived shift history) has shiftId; active-session Order does not
+    if ('shiftId' in showOrderDetail) {
+      const updated: CompletedOrder = applyOrderEdit(showOrderDetail, editForm);
+      updateCompletedOrder(updated);
+      setShowOrderDetail(updated);
+    } else {
+      const updated: Order = applyOrderEdit(showOrderDetail, editForm);
+      updateOrder(updated);
+      setShowOrderDetail(updated);
     }
-    // Active session orders belong to the current shift
-    return activeShiftDate || new Date(order.createdAt).toISOString().split('T')[0];
-  }, [shiftDateMap, activeShiftDate]);
+    setEditForm(null);
+  }, [showOrderDetail, editForm, updateOrder, updateCompletedOrder]);
+
+  // Map shiftId -> shift open/close window, for O(1) lookups
+  const shiftWindowMap = useMemo(() => buildShiftWindowMap(cashShifts), [cashShifts]);
+
+  // Window of the currently active shift (orders after midnight belong to this date)
+  const activeShiftWindow = useMemo(() => getActiveShiftWindow(cashShifts), [cashShifts]);
+
+  // Returns the shift date for an order (not the calendar date of createdAt),
+  // unless the order's date was edited — then createdAt is authoritative
+  const getOrderShiftDate = useCallback(
+    (order: HistoryOrder): string => getOrderShiftDateFor(order, shiftWindowMap, activeShiftWindow),
+    [shiftWindowMap, activeShiftWindow]
+  );
 
   // Combine current session orders (rendido/cancelado) with completedOrders history
   const allHistoricalOrders = useMemo(() => {
@@ -462,7 +490,7 @@ export default function SalesHistory() {
       {showOrderDetail && (
         <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowOrderDetail(null)}
+          onClick={closeOrderDetail}
         >
           <div
             className="bg-gray-800 rounded-xl border border-gray-700 max-w-lg w-full max-h-[90vh] overflow-y-auto"
@@ -471,51 +499,186 @@ export default function SalesHistory() {
             <div className={`px-6 py-4 ${orderStatusColors[showOrderDetail.status]}`}>
               <div className="flex justify-between items-center">
                 <span className="text-2xl font-bold">Pedido #{showOrderDetail.orderNumber}</span>
-                <button onClick={() => setShowOrderDetail(null)} className="text-white/80 hover:text-white text-xl">
-                  &times;
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-750 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Fecha</p>
-                  <p className="text-white">{formatDate(showOrderDetail.createdAt)}</p>
-                </div>
-                <div className="bg-gray-750 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Hora</p>
-                  <p className="text-white">{formatTime(showOrderDetail.createdAt)}</p>
-                </div>
-              </div>
-
-              <div className="bg-gray-750 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">Cliente</p>
-                <p className="text-white font-medium">{showOrderDetail.customerName}</p>
-                <p className="text-gray-400 text-sm">{showOrderDetail.customerPhone}</p>
-              </div>
-
-              <div>
-                <p className="text-gray-400 text-xs mb-2">Productos</p>
-                <div className="space-y-2">
-                  {showOrderDetail.items.map((item, idx) => (
-                    <div key={idx} className="bg-gray-750 rounded p-2 flex justify-between">
-                      <span className="text-white">{item.quantity}x {item.productName}</span>
-                      <span className="text-green-400">${item.subtotal.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border-t border-gray-700 pt-4">
-                <div className="flex justify-between text-lg">
-                  <span className="text-gray-400">Total</span>
-                  <span className={`font-bold ${showOrderDetail.status === 'rendido' ? 'text-green-400' : 'text-red-400'}`}>
-                    ${showOrderDetail.total.toLocaleString()}
-                  </span>
+                <div className="flex items-center gap-3">
+                  {isSuperAdmin && !editForm && (
+                    <button
+                      onClick={() => startEditOrder(showOrderDetail)}
+                      className="text-white/80 hover:text-white"
+                      title="Editar pedido"
+                    >
+                      <Pencil className="w-5 h-5" />
+                    </button>
+                  )}
+                  <button onClick={closeOrderDetail} className="text-white/80 hover:text-white text-xl">
+                    &times;
+                  </button>
                 </div>
               </div>
             </div>
+
+            {editForm ? (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-gray-400 text-xs">Fecha</label>
+                    <input
+                      type="date"
+                      value={editForm.date}
+                      onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs">Hora</label>
+                    <input
+                      type="time"
+                      value={editForm.time}
+                      onChange={e => setEditForm({ ...editForm, time: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-gray-400 text-xs">Cliente</label>
+                  <input
+                    type="text"
+                    value={editForm.customerName}
+                    onChange={e => setEditForm({ ...editForm, customerName: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-gray-400 text-xs">Telefono</label>
+                  <input
+                    type="text"
+                    value={editForm.customerPhone}
+                    onChange={e => setEditForm({ ...editForm, customerPhone: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-gray-400 text-xs">Direccion</label>
+                  <input
+                    type="text"
+                    value={editForm.customerAddress}
+                    onChange={e => setEditForm({ ...editForm, customerAddress: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-gray-400 text-xs">Tipo de pedido</label>
+                    <select
+                      value={editForm.orderType}
+                      onChange={e => setEditForm({ ...editForm, orderType: e.target.value as OrderType })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                    >
+                      <option value="delivery">Delivery</option>
+                      <option value="mostrador">Mostrador</option>
+                      <option value="retiro">Retiro</option>
+                      <option value="mesa">Mesa</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs">Metodo de pago</label>
+                    <select
+                      value={editForm.paymentMethod}
+                      onChange={e => setEditForm({ ...editForm, paymentMethod: e.target.value as PaymentMethod })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                    >
+                      <option value="efectivo">Efectivo</option>
+                      <option value="tarjeta">Tarjeta</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="qr">QR</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-gray-400 text-xs">Total</label>
+                  <input
+                    type="number"
+                    value={editForm.total}
+                    onChange={e => setEditForm({ ...editForm, total: Number(e.target.value) })}
+                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <p className="text-gray-400 text-xs mb-2">Productos</p>
+                  <div className="space-y-2">
+                    {showOrderDetail.items.map((item, idx) => (
+                      <div key={idx} className="bg-gray-750 rounded p-2 flex justify-between">
+                        <span className="text-white">{item.quantity}x {item.productName}</span>
+                        <span className="text-green-400">${item.subtotal.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setEditForm(null)}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-medium"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-750 rounded-lg p-3">
+                    <p className="text-gray-400 text-xs">Fecha</p>
+                    <p className="text-white">{formatDate(showOrderDetail.createdAt)}</p>
+                  </div>
+                  <div className="bg-gray-750 rounded-lg p-3">
+                    <p className="text-gray-400 text-xs">Hora</p>
+                    <p className="text-white">{formatTime(showOrderDetail.createdAt)}</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-750 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs">Cliente</p>
+                  <p className="text-white font-medium">{showOrderDetail.customerName}</p>
+                  <p className="text-gray-400 text-sm">{showOrderDetail.customerPhone}</p>
+                  {showOrderDetail.customerAddress && (
+                    <p className="text-gray-400 text-sm">{showOrderDetail.customerAddress}</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-gray-400 text-xs mb-2">Productos</p>
+                  <div className="space-y-2">
+                    {showOrderDetail.items.map((item, idx) => (
+                      <div key={idx} className="bg-gray-750 rounded p-2 flex justify-between">
+                        <span className="text-white">{item.quantity}x {item.productName}</span>
+                        <span className="text-green-400">${item.subtotal.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-4">
+                  <div className="flex justify-between text-lg">
+                    <span className="text-gray-400">Total</span>
+                    <span className={`font-bold ${showOrderDetail.status === 'rendido' ? 'text-green-400' : 'text-red-400'}`}>
+                      ${showOrderDetail.total.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
