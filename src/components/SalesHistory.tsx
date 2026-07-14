@@ -237,7 +237,7 @@ export default function SalesHistory() {
       index: overallAvg > 0 ? (value / overallAvg) * 100 : 0,
     });
 
-    return labels.map((label, idx) => {
+    const days = labels.map((label, idx) => {
       const avgQty = daysObserved[idx] > 0 ? qtyTotals[idx] / daysObserved[idx] : 0;
       const avgRevenue = daysObserved[idx] > 0 ? revenueTotals[idx] / daysObserved[idx] : 0;
       const avgTicket = orderCounts[idx] > 0 ? revenueTotals[idx] / orderCounts[idx] : 0;
@@ -249,6 +249,18 @@ export default function SalesHistory() {
         ticket: toMetric(avgTicket, overallAvgTicket),
       };
     });
+
+    // "Total Semanal": a representative full week built from each weekday's own average.
+    // qty/revenue are additive (sum of the 7 daily averages), but a ticket average isn't
+    // additive across days, so its weekly figure is the period's overall pooled average
+    // instead — that's why it always indexes to exactly 100 here.
+    const weekTotal = {
+      qty: toMetric(days.reduce((sum, d) => sum + d.qty.value, 0), overallAvgQty),
+      revenue: toMetric(days.reduce((sum, d) => sum + d.revenue.value, 0), overallAvgRevenue),
+      ticket: toMetric(overallAvgTicket, overallAvgTicket),
+    };
+
+    return { days, weekTotal };
   }, [filteredOrders, getOrderShiftDate]);
 
   const formatDate = (date: Date | string) => {
@@ -307,8 +319,17 @@ export default function SalesHistory() {
 
   const visibleWeekdayMetricKeys = (Object.keys(visibleMetrics) as WeekdayMetricKey[]).filter(k => visibleMetrics[k]);
   // 100 always anchors the reference line; bars can extend past it, so the ceiling is
-  // whichever is bigger — never below 100 or the chart baseline would be off-screen
-  const maxWeekdayIndex = Math.max(100, ...weekdayChart.flatMap(d => visibleWeekdayMetricKeys.map(k => d[k].index)));
+  // whichever is bigger — never below 100 or the chart baseline would be off-screen.
+  // The "Total Semanal" column is deliberately excluded: it's a sum of ~7 days and would
+  // dwarf every daily bar if it shared this scale, so it gets its own scale below.
+  const maxWeekdayIndex = Math.max(100, ...weekdayChart.days.flatMap(d => visibleWeekdayMetricKeys.map(k => d[k].index)));
+  const maxWeekTotalIndex = Math.max(100, ...visibleWeekdayMetricKeys.map(k => weekdayChart.weekTotal[k].index));
+  // Fixed (non-responsive) gap so the Total column's width is pixel-identical between the
+  // bars row and the weekday-names row below — they're separate flex rows, so a Tailwind
+  // responsive gap class could drift a px or two apart and throw off the "Total" label's centering
+  const WEEKDAY_TOTAL_COL_GAP = 8;
+  const weekdayTotalColWidth = visibleWeekdayMetricKeys.length * WEEKDAY_BAR_WIDTH
+    + Math.max(visibleWeekdayMetricKeys.length - 1, 0) * WEEKDAY_TOTAL_COL_GAP;
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 md:p-6">
@@ -441,7 +462,7 @@ export default function SalesHistory() {
 
           {visibleWeekdayMetricKeys.length === 0 ? (
             <p className="text-gray-500 text-center py-12">Selecciona al menos una variable</p>
-          ) : weekdayChart.every(d => d.daysObserved === 0) ? (
+          ) : weekdayChart.days.every(d => d.daysObserved === 0) ? (
             <p className="text-gray-500 text-center py-12">No hay ventas suficientes para este grafico</p>
           ) : (
             <div className="pt-2">
@@ -455,7 +476,7 @@ export default function SalesHistory() {
                 />
 
                 <div className="flex items-end justify-between gap-2 sm:gap-4 h-full">
-                  {weekdayChart.map(d => (
+                  {weekdayChart.days.map(d => (
                     <div key={d.label} className="flex-1 flex items-end justify-center gap-1.5 sm:gap-2 h-full">
                       {visibleWeekdayMetricKeys.map(key => {
                         const meta = WEEKDAY_METRIC_CONFIG[key];
@@ -492,16 +513,63 @@ export default function SalesHistory() {
                       })}
                     </div>
                   ))}
+
+                  {/* Total Semanal — a separate scale (own max) so summing ~7 days' worth
+                      of qty/revenue doesn't dwarf the daily comparison bars above */}
+                  <div
+                    className="flex items-end justify-center h-full border-l border-gray-700 pl-2 sm:pl-4 ml-1 sm:ml-2"
+                    style={{ gap: WEEKDAY_TOTAL_COL_GAP, width: weekdayTotalColWidth }}
+                  >
+                    {visibleWeekdayMetricKeys.map(key => {
+                      const meta = WEEKDAY_METRIC_CONFIG[key];
+                      const metric = weekdayChart.weekTotal[key];
+                      const barHeight = metric.value > 0
+                        ? Math.max((metric.index / maxWeekTotalIndex) * WEEKDAY_MAX_BAR_HEIGHT, 3)
+                        : 0;
+                      return (
+                        <div
+                          key={key}
+                          className="relative flex flex-col items-center justify-end h-full"
+                          style={{ width: WEEKDAY_BAR_WIDTH }}
+                        >
+                          <div
+                            className={`${meta.bar} rounded-t-sm opacity-80 transition-all`}
+                            style={{ width: WEEKDAY_BAR_WIDTH, height: barHeight }}
+                            title={`${meta.label} - Total Semanal: ${meta.format(metric.value)}${key === 'ticket' ? ' (promedio general del periodo, no es una suma)' : ' (suma de los promedios de los 7 dias)'}`}
+                          />
+                          {metric.value > 0 && (
+                            <span
+                              className={`absolute text-[11px] font-bold whitespace-nowrap ${meta.text}`}
+                              style={{
+                                bottom: barHeight + 4,
+                                left: '50%',
+                                transform: 'translateX(-50%) rotate(180deg)',
+                                writingMode: 'vertical-rl',
+                              }}
+                            >
+                              {meta.format(metric.value)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               {/* Weekday names */}
               <div className="flex justify-between gap-2 sm:gap-4 mt-2">
-                {weekdayChart.map(d => (
+                {weekdayChart.days.map(d => (
                   <div key={d.label} className="flex-1 text-center">
                     <span className="text-gray-400 text-[10px] sm:text-xs">{d.label.slice(0, 3)}</span>
                   </div>
                 ))}
+                <div
+                  className="text-center border-l border-gray-700 pl-2 sm:pl-4 ml-1 sm:ml-2"
+                  style={{ width: weekdayTotalColWidth }}
+                >
+                  <span className="text-gray-400 text-[10px] sm:text-xs font-semibold">Total</span>
+                </div>
               </div>
             </div>
           )}
