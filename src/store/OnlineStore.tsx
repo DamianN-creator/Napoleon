@@ -170,7 +170,7 @@ export default function OnlineStore() {
         <img
           src="/logo.jpg"
           alt="Napoleon Pizzeria"
-          className="h-20 w-20 object-contain rounded-lg mix-blend-screen"
+          className="h-32 w-32 object-contain rounded-lg mix-blend-screen"
         />
         <div className="bg-gray-800 border border-gray-700 rounded-full p-4">
           <Clock className="w-8 h-8 text-yellow-400" />
@@ -217,7 +217,7 @@ export default function OnlineStore() {
           <img
             src="/logo.jpg"
             alt="Napoleon Pizzeria"
-            className="h-14 w-14 object-contain rounded-lg mix-blend-screen shrink-0"
+            className="h-20 w-20 object-contain rounded-lg mix-blend-screen shrink-0"
           />
           <div className="min-w-0">
             <h1 className="text-white font-bold text-xl leading-tight">Napoleon Pizzeria</h1>
@@ -248,7 +248,7 @@ export default function OnlineStore() {
         {view === 'catalog' && (
           <div className="space-y-4">
             {availableCategories.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sticky top-[73px] bg-gray-900 z-10">
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sticky top-[113px] bg-gray-900 z-10">
                 {availableCategories.map(category => (
                   <button
                     key={category}
