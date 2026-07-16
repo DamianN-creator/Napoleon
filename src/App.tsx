@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
+import OnlineOrderAlert from './components/OnlineOrderAlert';
 import Dashboard from './components/Dashboard';
 import OrderEntry from './components/OrderEntry';
 import Kitchen from './components/Kitchen';
@@ -214,6 +215,8 @@ function AppContent() {
           {renderContent()}
         </main>
       </div>
+
+      <OnlineOrderAlert setActiveTab={setActiveTab} />
     </div>
   );
 }

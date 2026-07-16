@@ -19,6 +19,7 @@ import {
   Scale,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useApp } from '../context/AppContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -29,6 +30,9 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isSuperAdmin }: SidebarProps) {
+  const { orders } = useApp();
+  const pendingOnlineCount = orders.filter(o => o.channel === 'online' && o.status === 'pendiente').length;
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'cash', label: 'Caja', icon: DollarSign },
@@ -86,24 +90,34 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, is
         {/* Navigation — scrolleable */}
         <nav className="flex-1 overflow-y-auto p-4">
           <ul className="space-y-2">
-            {menuItems.map(item => (
-              <li key={item.id}>
-                <button
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                    activeTab === item.id
-                      ? 'bg-cyan-500 text-white'
-                      : 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </button>
-              </li>
-            ))}
+            {menuItems.map(item => {
+              const isAlerting = item.id === 'active' && pendingOnlineCount > 0 && activeTab !== item.id;
+              return (
+                <li key={item.id}>
+                  <button
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                      activeTab === item.id
+                        ? 'bg-cyan-500 text-white'
+                        : isAlerting
+                        ? 'bg-red-600 text-white animate-pulse'
+                        : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="font-medium flex-1 text-left">{item.label}</span>
+                    {isAlerting && (
+                      <span className="bg-white text-red-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0">
+                        {pendingOnlineCount}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 
