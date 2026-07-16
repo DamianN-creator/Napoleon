@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.create-online-order]
 verify_jwt = false
+
+[functions.get-shop-status]
+verify_jwt = false

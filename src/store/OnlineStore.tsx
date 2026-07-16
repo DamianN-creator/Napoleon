@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { categoryLabels } from '../data/initialData';
 import { Product, ProductCategory } from '../types';
-import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Check, RefreshCw, DollarSign, Phone, MessageCircle, MapPin } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Check, RefreshCw, DollarSign, Phone, MessageCircle, MapPin, Clock } from 'lucide-react';
 
 const QUICK_CASH_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
@@ -24,6 +24,7 @@ export default function OnlineStore() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [shopOpen, setShopOpen] = useState(true);
   const [view, setView] = useState<View>('catalog');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<ProductCategory | null>(null);
@@ -43,22 +44,25 @@ export default function OnlineStore() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase
-      .from('products')
-      .select('id, data')
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          setLoadError('No pudimos cargar el menu. Intenta de nuevo en unos minutos.');
-          setLoading(false);
-          return;
-        }
-        const available = (data || [])
-          .map(row => row.data as Product)
-          .filter(p => p && p.available !== false && p.publishedOnline === true && typeof p.price === 'number');
-        setProducts(available);
+
+    Promise.all([
+      supabase.from('products').select('id, data'),
+      supabase.functions.invoke('get-shop-status'),
+    ]).then(([productsResult, statusResult]) => {
+      if (cancelled) return;
+      if (productsResult.error) {
+        setLoadError('No pudimos cargar el menu. Intenta de nuevo en unos minutos.');
         setLoading(false);
-      });
+        return;
+      }
+      const available = (productsResult.data || [])
+        .map(row => row.data as Product)
+        .filter(p => p && p.available !== false && p.publishedOnline === true && typeof p.price === 'number');
+      setProducts(available);
+      setShopOpen(statusResult.data?.open === true);
+      setLoading(false);
+    });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -156,6 +160,44 @@ export default function OnlineStore() {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <p className="text-gray-300 text-center">{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!shopOpen) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6 text-center gap-4">
+        <img
+          src="/logo.jpg"
+          alt="Napoleon Pizzeria"
+          className="h-20 w-20 object-contain rounded-lg mix-blend-screen"
+        />
+        <div className="bg-gray-800 border border-gray-700 rounded-full p-4">
+          <Clock className="w-8 h-8 text-yellow-400" />
+        </div>
+        <h1 className="text-white font-bold text-2xl">Estamos cerrados</h1>
+        <p className="text-gray-400 max-w-sm">
+          En este momento no estamos tomando pedidos online. Volve a intentarlo durante nuestro horario de atencion.
+        </p>
+        <div className="flex flex-col items-center gap-2 text-gray-300 text-sm mt-2">
+          <a href="tel:2307127" className="flex items-center gap-2 hover:text-yellow-400">
+            <Phone className="w-4 h-4 text-yellow-400" />
+            2307127
+          </a>
+          <a
+            href="https://wa.me/5493812098719"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 hover:text-yellow-400"
+          >
+            <MessageCircle className="w-4 h-4 text-yellow-400" />
+            381 209-8719
+          </a>
+          <span className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-yellow-400" />
+            Santa Fe 153
+          </span>
+        </div>
       </div>
     );
   }

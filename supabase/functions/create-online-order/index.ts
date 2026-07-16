@@ -122,6 +122,12 @@ function validateRequest(body: unknown): { ok: true; value: OnlineOrderRequest }
   };
 }
 
+async function isShopOpen(): Promise<boolean> {
+  const { data, error } = await supabase.from('cash_shifts').select('data');
+  if (error || !data) return false;
+  return data.some(row => (row.data as { status?: string } | null)?.status === 'open');
+}
+
 async function fetchProductsById(ids: string[]): Promise<Map<string, Product>> {
   const { data, error } = await supabase.from('products').select('id, data');
   const map = new Map<string, Product>();
@@ -175,6 +181,10 @@ async function getNextOrderNumber(): Promise<number> {
 }
 
 async function handleCreateOrder(req: OnlineOrderRequest): Promise<Response> {
+  if (!(await isShopOpen())) {
+    return jsonResponse({ error: 'El local esta cerrado en este momento. Intenta mas tarde.' }, 400);
+  }
+
   const productIds = [...new Set(req.items.map(i => i.productId))];
   const products = await fetchProductsById(productIds);
 
