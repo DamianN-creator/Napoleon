@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { categoryLabels } from '../data/initialData';
 import { Product, ProductCategory } from '../types';
-import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Check, RefreshCw, Pizza, DollarSign } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Check, RefreshCw, DollarSign, Phone, MessageCircle, MapPin } from 'lucide-react';
 
 const QUICK_CASH_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
@@ -26,6 +26,7 @@ export default function OnlineStore() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<View>('catalog');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [activeCategory, setActiveCategory] = useState<ProductCategory | null>(null);
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -71,6 +72,18 @@ export default function OnlineStore() {
     for (const list of groups.values()) list.sort((a, b) => a.name.localeCompare(b.name));
     return groups;
   }, [products]);
+
+  const availableCategories = useMemo(
+    () => CATEGORY_ORDER.filter(cat => (productsByCategory.get(cat) || []).length > 0),
+    [productsByCategory]
+  );
+
+  useEffect(() => {
+    if (availableCategories.length === 0) return;
+    if (!activeCategory || !availableCategories.includes(activeCategory)) {
+      setActiveCategory(availableCategories[0]);
+    }
+  }, [availableCategories, activeCategory]);
 
   const total = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -159,68 +172,106 @@ export default function OnlineStore() {
               <ArrowLeft className="w-6 h-6" />
             </button>
           )}
-          <Pizza className="w-7 h-7 text-yellow-400" />
-          <h1 className="text-white font-bold text-xl">Napoleon Pizzeria</h1>
+          <img
+            src="/logo.jpg"
+            alt="Napoleon Pizzeria"
+            className="h-14 w-14 object-contain rounded-lg mix-blend-screen shrink-0"
+          />
+          <div className="min-w-0">
+            <h1 className="text-white font-bold text-xl leading-tight">Napoleon Pizzeria</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-gray-400 text-xs">
+              <a href="tel:2307127" className="flex items-center gap-1 hover:text-yellow-400">
+                <Phone className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                2307127
+              </a>
+              <a
+                href="https://wa.me/5493812098719"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-yellow-400"
+              >
+                <MessageCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                381 209-8719
+              </a>
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                Santa Fe 153
+              </span>
+            </div>
+          </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4">
         {view === 'catalog' && (
-          <div className="space-y-8">
-            {CATEGORY_ORDER.filter(cat => (productsByCategory.get(cat) || []).length > 0).map(category => (
-              <section key={category}>
-                <h2 className="text-white font-bold text-lg mb-3">{categoryLabels[category] || category}</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(productsByCategory.get(category) || []).map(product => {
-                    const inCart = cart.find(i => i.productId === product.id);
-                    return (
-                      <div key={product.id} className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex justify-between items-center gap-3">
-                        <div className="min-w-0 flex items-center gap-3">
-                          {product.image && (
-                            <img
-                              src={product.image}
-                              alt=""
-                              className="w-14 h-14 rounded-lg object-cover border border-gray-700 shrink-0"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-white font-medium truncate">{product.name}</p>
-                            {product.description && (
-                              <p className="text-gray-400 text-sm line-clamp-2">{product.description}</p>
-                            )}
-                            <p className="text-yellow-400 font-bold">${product.price.toLocaleString()}</p>
-                          </div>
-                        </div>
-                        {inCart ? (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => changeQuantity(product.id, -1)}
-                              className="w-8 h-8 rounded-lg bg-gray-700 text-white flex items-center justify-center hover:bg-gray-600"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <span className="text-white font-bold w-5 text-center">{inCart.quantity}</span>
-                            <button
-                              onClick={() => changeQuantity(product.id, 1)}
-                              className="w-8 h-8 rounded-lg bg-yellow-500 text-gray-900 flex items-center justify-center hover:bg-yellow-600"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => addToCart(product)}
-                            className="shrink-0 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold px-4 py-2 rounded-lg"
-                          >
-                            Agregar
-                          </button>
+          <div className="space-y-4">
+            {availableCategories.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sticky top-[73px] bg-gray-900 z-10">
+                {availableCategories.map(category => (
+                  <button
+                    key={category}
+                    onClick={() => setActiveCategory(category)}
+                    className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                      activeCategory === category
+                        ? 'bg-yellow-500 text-gray-900'
+                        : 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700'
+                    }`}
+                  >
+                    {categoryLabels[category] || category}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(productsByCategory.get(activeCategory as ProductCategory) || []).map(product => {
+                const inCart = cart.find(i => i.productId === product.id);
+                return (
+                  <div key={product.id} className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex justify-between items-center gap-3">
+                    <div className="min-w-0 flex items-center gap-3">
+                      {product.image && (
+                        <img
+                          src={product.image}
+                          alt=""
+                          className="w-14 h-14 rounded-lg object-cover border border-gray-700 shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-white font-medium truncate">{product.name}</p>
+                        {product.description && (
+                          <p className="text-gray-400 text-sm line-clamp-2">{product.description}</p>
                         )}
+                        <p className="text-yellow-400 font-bold">${product.price.toLocaleString()}</p>
                       </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+                    </div>
+                    {inCart ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => changeQuantity(product.id, -1)}
+                          className="w-8 h-8 rounded-lg bg-gray-700 text-white flex items-center justify-center hover:bg-gray-600"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="text-white font-bold w-5 text-center">{inCart.quantity}</span>
+                        <button
+                          onClick={() => changeQuantity(product.id, 1)}
+                          className="w-8 h-8 rounded-lg bg-yellow-500 text-gray-900 flex items-center justify-center hover:bg-yellow-600"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => addToCart(product)}
+                        className="shrink-0 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold px-4 py-2 rounded-lg"
+                      >
+                        Agregar
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
             {products.length === 0 && (
               <p className="text-gray-400 text-center py-12">No hay productos disponibles en este momento.</p>
             )}
